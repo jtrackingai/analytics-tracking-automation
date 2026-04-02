@@ -1,0 +1,25 @@
+{
+  "name": "event-tracking-skill",
+  "version": "1.0.0",
+  "description": "Automated web event tracking skill for GA4 + GTM",
+  "main": "dist/cli.js",
+  "bin": {
+    "event-tracking": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "ts-node src/cli.ts",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "commander": "^12.1.0",
+    "googleapis": "^144.0.0",
+    "open": "^10.1.0",
+    "playwright": "^1.50.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  }
+}
