@@ -8,7 +8,13 @@
   },
   "scripts": {
     "build": "tsc",
+    "check": "node scripts/check.mjs",
     "dev": "ts-node src/cli.ts",
+    "doctor": "node scripts/doctor.mjs",
+    "export:skills": "node scripts/export-skills.mjs",
+    "install:skills": "node scripts/install-skills.mjs",
+    "test": "npm run build && npm run test:built",
+    "test:built": "node --test tests/workflow-state.test.mjs tests/skill-family.test.mjs",
     "postinstall": "playwright install chromium"
   },
   "dependencies": {

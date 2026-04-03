@@ -1,0 +1,88 @@
+{
+  "bundles": [
+    {
+      "name": "event-tracking-skill",
+      "kind": "umbrella",
+      "skillFile": "SKILL.md",
+      "metadataFile": "agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-discover",
+      "kind": "phase",
+      "skillFile": "skills/tracking-discover/SKILL.md",
+      "metadataFile": "skills/tracking-discover/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-group",
+      "kind": "phase",
+      "skillFile": "skills/tracking-group/SKILL.md",
+      "metadataFile": "skills/tracking-group/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-schema",
+      "kind": "phase",
+      "skillFile": "skills/tracking-schema/SKILL.md",
+      "metadataFile": "skills/tracking-schema/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-sync",
+      "kind": "phase",
+      "skillFile": "skills/tracking-sync/SKILL.md",
+      "metadataFile": "skills/tracking-sync/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-verify",
+      "kind": "phase",
+      "skillFile": "skills/tracking-verify/SKILL.md",
+      "metadataFile": "skills/tracking-verify/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    },
+    {
+      "name": "tracking-shopify",
+      "kind": "phase",
+      "skillFile": "skills/tracking-shopify/SKILL.md",
+      "metadataFile": "skills/tracking-shopify/agents/openai.yaml",
+      "copiedDirectories": [
+        {
+          "source": "references",
+          "target": "references"
+        }
+      ]
+    }
+  ]
+}

@@ -17,6 +17,7 @@ After the artifact directory is chosen, downstream commands should keep reading 
 | `shopify-bootstrap-review.md` | Shopify-only human-readable review of baseline and inferred bootstrap events, including why each one was included and whether it should be kept, reviewed manually, or removed |
 | `event-schema.json` | GA4 event plan — editable before generating GTM config. For Shopify runs, `prepare-schema` bootstraps this file automatically if it does not already exist |
 | `event-spec.md` | Human-readable event specification for stakeholder review |
+| `workflow-state.json` | Machine-readable workflow checkpoint state, including schema confirmation, verification status, publish status, warnings, and next recommended step |
 | `gtm-config.json` | GTM Web Container export JSON ready to sync, plus event-tracking metadata such as GA4 Measurement ID, configuration-tag target ID, and optional Google tag ID |
 | `gtm-context.json` | Saved GTM account / container / workspace IDs for subsequent steps |
 | `credentials.json` | URL-scoped Google OAuth token cache reused by `sync`, `preview`, and `publish` for this artifact directory; never commit this file |
@@ -29,15 +30,20 @@ After the artifact directory is chosen, downstream commands should keep reading 
 
 `event-schema.json` is the primary editable artifact. The agent presents it as a table and waits for user confirmation before proceeding to GTM config generation. Any edits made here flow through to all downstream steps.
 
+After the schema is approved, run `./event-tracking confirm-schema <artifact-dir>/event-schema.json`. That command stores a hash of the approved schema snapshot in `workflow-state.json`.
+
 `site-analysis.json` is editable at Step 1.5 (page group confirmation). Changes to `pageGroups` affect event scoping in the schema.
 
-After the current grouping is approved, run `node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json`. That command stores a hash of the approved `pageGroups` snapshot in `site-analysis.json`.
+After the current grouping is approved, run `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json`. That command stores a hash of the approved `pageGroups` snapshot in `site-analysis.json`.
 
 `prepare-schema` only continues when the stored confirmation hash still matches the current `pageGroups`. If the groups change later, the confirmation is treated as stale and must be recorded again.
+
+`generate-gtm` only continues when the stored schema confirmation hash in `workflow-state.json` still matches the current `event-schema.json`. If the schema changes later, the confirmation is treated as stale and must be recorded again.
 
 ## Re-running Steps
 
 - Re-run `generate-gtm` after editing `event-schema.json`
+- Re-run `confirm-schema` after editing `event-schema.json`
 - Re-run `sync` to push a corrected config. Stale `[JTracking]` managed entities are cleaned automatically.
 - Re-run `preview` after sync to re-verify
 - For Shopify sites, re-install `shopify-custom-pixel.js` after re-syncing to a different GTM container
@@ -50,6 +56,7 @@ Example:
 /tmp/output/example_com/
   site-analysis.json
   event-schema.json
+  workflow-state.json
   gtm-config.json
   gtm-context.json
   credentials.json

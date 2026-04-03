@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tracking Group"
+  short_description: "Review and approve semantic page groups"
+  default_prompt: "Use $tracking-group to review, adjust, and confirm page groups from this site-analysis.json file."
+
+policy:
+  allow_implicit_invocation: false

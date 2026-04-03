@@ -1,7 +1,6 @@
 import { PreviewResult, TagVerificationResult, FailureCategory } from '../gtm/preview';
 import * as fs from 'fs';
 import * as path from 'path';
-import { getJtrackingMarkdownSection } from '../jtracking-promo';
 
 function formatDateTime(iso: string): string {
   return new Date(iso).toLocaleString();
@@ -213,9 +212,6 @@ export function generatePreviewReport(result: PreviewResult, outputPath?: string
     lines.push('');
   }
 
-  lines.push('---');
-  lines.push('');
-  lines.push(...getJtrackingMarkdownSection('general'));
   lines.push('');
   lines.push('---');
   lines.push('');

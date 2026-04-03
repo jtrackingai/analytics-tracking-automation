@@ -14,11 +14,11 @@
 - If you see an error like `listen EPERM 127.0.0.1`, treat it as an environment issue rather than a GTM configuration problem and rerun the authorization step outside the sandbox.
 - Clear cached tokens and retry:
   ```bash
-  node dist/cli.js auth-clear --context-file <artifact-dir>/gtm-context.json
+  ./event-tracking auth-clear --context-file <artifact-dir>/gtm-context.json
   ```
   Or clear every URL-scoped cache under a chosen root:
   ```bash
-  node dist/cli.js auth-clear --output-root <output-root>
+  ./event-tracking auth-clear --output-root <output-root>
   ```
 
 ## No Events Fire in Preview

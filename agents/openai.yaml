@@ -1,0 +1,7 @@
+interface:
+  display_name: "Event Tracking Skill"
+  short_description: "Plan, validate, and sync GTM tracking"
+  default_prompt: "Use $event-tracking-skill to run or resume the GA4 and GTM tracking workflow for this site."
+
+policy:
+  allow_implicit_invocation: true

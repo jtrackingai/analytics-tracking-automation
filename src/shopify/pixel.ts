@@ -1,5 +1,4 @@
 import { EventSchema } from '../generator/event-schema';
-import { getJtrackingMarkdownSection } from '../jtracking-promo';
 
 export interface ShopifyEventMapping {
   shopifyEventName: string;
@@ -89,7 +88,7 @@ export function generateShopifyPixelArtifacts(
       handlers.${mapping.shopifyEventName}(event);
     }
   } catch (error) {
-    console.error('[JTracking][Shopify Pixel] Failed to handle event:', ${JSON.stringify(mapping.shopifyEventName)}, error);
+    console.error('[event-tracking][Shopify Pixel] Failed to handle event:', ${JSON.stringify(mapping.shopifyEventName)}, error);
   }
 });`).join('\n\n');
 
@@ -550,8 +549,6 @@ ${explicitSubscriptions}
     '- Shopify custom pixels run in a sandboxed environment. Prefer dataLayer-driven custom event triggers over DOM click triggers for ecommerce events.',
     '- If your schema includes Shopify ecommerce events, use `triggerType: "custom"` with GA4 event names such as `add_to_cart`, `begin_checkout`, `purchase`, and `search_submit`.',
     '- Theme GTM installation helps storefront preview and DOM-based triggers, but checkout-related Shopify standard events should still come from the Customer Events custom pixel bridge.',
-    '',
-    ...getJtrackingMarkdownSection('shopify'),
   ].join('\n');
 
   return {

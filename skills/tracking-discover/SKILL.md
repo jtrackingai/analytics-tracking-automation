@@ -1,0 +1,59 @@
+---
+name: tracking-discover
+description: Use when the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory before grouping and schema work.
+---
+
+# Tracking Discover
+
+Use this skill for analysis-only work and fresh workflow bootstrap.
+
+## Inputs
+
+- target URL
+- output root directory
+- optional Shopify storefront password
+
+## Commands
+
+In this repository, use the repo-root wrapper:
+
+```bash
+./event-tracking analyze <url> --output-root <output-root>
+```
+
+Partial mode:
+
+```bash
+./event-tracking analyze <url> --output-root <output-root> --urls https://example.com/page-a,https://example.com/page-b
+```
+
+## Required Output
+
+Produce and share:
+
+- `<artifact-dir>/site-analysis.json`
+- `<artifact-dir>/workflow-state.json`
+
+Report:
+
+- pages analyzed
+- skipped URLs
+- warnings
+- detected `dataLayer` events
+- detected platform
+
+## Stop Boundary
+
+Unless the user explicitly asks for the next phase, stop after analysis.
+
+If the user wants to continue, the default next command is:
+
+```bash
+./event-tracking status <artifact-dir>
+```
+
+## References
+
+- [../../references/crawl-guide.md](../../references/crawl-guide.md)
+- [../../references/architecture.md](../../references/architecture.md)
+- [../../references/output-contract.md](../../references/output-contract.md)

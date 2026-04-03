@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tracking Shopify"
+  short_description: "Apply Shopify tracking branch rules"
+  default_prompt: "Use $tracking-shopify to apply the Shopify-specific schema, sync, and verification rules for this run."
+
+policy:
+  allow_implicit_invocation: false

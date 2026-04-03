@@ -76,7 +76,7 @@ After changes, display updated table and ask for final confirmation.
 Once the user approves the current grouping, record that exact snapshot with:
 
 ```bash
-node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json
+./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json
 ```
 
 ## Anti-patterns

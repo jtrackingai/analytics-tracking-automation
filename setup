@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INSTALL_SKILLS=0
+INSTALL_ARGS=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --install-skills)
+      INSTALL_SKILLS=1
+      shift
+      ;;
+    --target-dir)
+      INSTALL_SKILLS=1
+      INSTALL_ARGS+=("$1")
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "Missing value for --target-dir" >&2
+        exit 1
+      fi
+      INSTALL_ARGS+=("$1")
+      shift
+      ;;
+    --skill)
+      INSTALL_SKILLS=1
+      INSTALL_ARGS+=("$1")
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "Missing value for --skill" >&2
+        exit 1
+      fi
+      INSTALL_ARGS+=("$1")
+      shift
+      ;;
+    --mode)
+      INSTALL_SKILLS=1
+      INSTALL_ARGS+=("$1")
+      shift
+      if [[ $# -eq 0 ]]; then
+        echo "Missing value for --mode" >&2
+        exit 1
+      fi
+      INSTALL_ARGS+=("$1")
+      shift
+      ;;
+    *)
+      echo "Unknown argument: $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+cd "$ROOT_DIR"
+npm ci
+npm run build
+npm run doctor
+
+if [[ "$INSTALL_SKILLS" -eq 1 ]]; then
+  npm run install:skills -- "${INSTALL_ARGS[@]}"
+fi
+
+echo
+echo "Setup complete."
+echo "Repo-local CLI: ./event-tracking --help"
+echo "Installed command name: event-tracking"
+if [[ "$INSTALL_SKILLS" -eq 1 ]]; then
+  echo "Codex skills installed via: npm run install:skills -- ${INSTALL_ARGS[*]}"
+else
+  echo "To install exported Codex skills later: npm run install:skills"
+fi

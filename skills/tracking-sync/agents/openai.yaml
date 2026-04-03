@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tracking Sync"
+  short_description: "Generate GTM config and sync workspace"
+  default_prompt: "Use $tracking-sync to generate GTM config and sync the approved tracking plan into GTM."
+
+policy:
+  allow_implicit_invocation: false

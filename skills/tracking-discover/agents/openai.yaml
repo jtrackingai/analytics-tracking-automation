@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tracking Discover"
+  short_description: "Analyze a site and bootstrap artifacts"
+  default_prompt: "Use $tracking-discover to analyze this site and create the initial tracking artifact directory."
+
+policy:
+  allow_implicit_invocation: false

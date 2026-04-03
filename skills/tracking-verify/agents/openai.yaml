@@ -1,0 +1,7 @@
+interface:
+  display_name: "Tracking Verify"
+  short_description: "Run preview QA and publish handoff"
+  default_prompt: "Use $tracking-verify to run preview QA, interpret failures, and prepare a publish-ready handoff."
+
+policy:
+  allow_implicit_invocation: false

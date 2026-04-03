@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CLI_PATH="$ROOT_DIR/dist/cli.js"
+
+if [[ ! -f "$CLI_PATH" ]]; then
+  echo "event-tracking: missing built CLI at $CLI_PATH" >&2
+  echo "Run ./setup or npm run build first." >&2
+  exit 1
+fi
+
+export EVENT_TRACKING_PUBLIC_CMD=./event-tracking
+exec node "$CLI_PATH" "$@"
