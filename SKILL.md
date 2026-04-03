@@ -100,6 +100,12 @@ After the Step 2 page-group table and before asking for confirmation, add:
 
 Ask the user to confirm or adjust, then continue.
 
+After the user confirms the current grouping, record that approval with:
+
+```bash
+node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json
+```
+
 For grouping rules, see [page-grouping-guide.md](references/page-grouping-guide.md).
 
 ---
@@ -111,6 +117,8 @@ First run:
 ```bash
 node dist/cli.js prepare-schema <artifact-dir>/site-analysis.json
 ```
+
+`prepare-schema` now hard-stops unless the current `pageGroups` snapshot has already been explicitly confirmed with `confirm-page-groups`.
 
 This always writes:
 

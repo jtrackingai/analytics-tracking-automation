@@ -4,10 +4,13 @@ Detailed rules for Step 3 - generating the GA4 event schema.
 
 ## Input Data
 
-Run `prepare-schema` first to derive a compact schema context from `site-analysis.json`:
+Run `confirm-page-groups` after page-group review, then run `prepare-schema` to derive a compact schema context from `site-analysis.json`:
 ```bash
+node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json
 node dist/cli.js prepare-schema <artifact-dir>/site-analysis.json
 ```
+
+`prepare-schema` will stop if the current `pageGroups` snapshot has not been explicitly confirmed yet.
 
 Read `<artifact-dir>/schema-context.json` and analyze:
 - Detected `platform` metadata (`generic` or `shopify`)

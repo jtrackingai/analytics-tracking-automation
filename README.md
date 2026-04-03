@@ -68,9 +68,10 @@ node dist/cli.js analyze https://www.example.com --output-root ./output
 
 The CLI creates the artifact directory automatically as `<output-root>/<url-slug>`, for example `./output/example_com`.
 
-Then continue with the same artifact directory:
+After filling `pageGroups` in `./output/example_com/site-analysis.json`, continue with the same artifact directory:
 
 ```bash
+node dist/cli.js confirm-page-groups ./output/example_com/site-analysis.json
 node dist/cli.js prepare-schema ./output/example_com/site-analysis.json
 node dist/cli.js validate-schema ./output/example_com/event-schema.json --check-selectors
 node dist/cli.js generate-spec ./output/example_com/event-schema.json
@@ -82,7 +83,8 @@ node dist/cli.js publish --context-file ./output/example_com/gtm-context.json --
 
 Important workflow note:
 
-- `prepare-schema` requires `pageGroups` to already be filled in `site-analysis.json`
+- `prepare-schema` requires `pageGroups` to already be filled in `site-analysis.json` and explicitly confirmed
+- after grouping pages, run `node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json`
 - for generic sites, `event-schema.json` is authored after `prepare-schema` from `schema-context.json`
 - for Shopify sites, `prepare-schema` bootstraps `event-schema.json` automatically if it does not already exist
 
@@ -107,6 +109,7 @@ The current workflow mixes agent-led review steps with CLI execution steps.
 | --- | --- | --- | --- |
 | Analyze | CLI | Crawls the site and captures pages, shared UI, warnings, detected events, and platform signals | `node dist/cli.js analyze <url> --output-root <output-root>` -> `site-analysis.json` |
 | Page Grouping | Agent or user | Fills `pageGroups` in `site-analysis.json` by business purpose before schema preparation | updated `site-analysis.json` |
+| Page Group Confirmation | User + CLI | Reviews the current page groups and records explicit approval for the current `pageGroups` snapshot | `node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json` -> updated `site-analysis.json` |
 | Prepare Schema Context | CLI | Compresses grouped analysis for schema authoring and bootstraps Shopify artifacts when needed | `node dist/cli.js prepare-schema <artifact-dir>/site-analysis.json` -> `schema-context.json`, Shopify bootstrap files |
 | Schema Authoring And Review | Agent or user + CLI validation | Creates or refines `event-schema.json`, validates selectors, and generates a readable spec for review | `validate-schema`, `generate-spec` -> `event-schema.json`, `event-spec.md` |
 | GTM Generation | CLI | Converts the approved schema into GTM-ready tags, triggers, and variables | `node dist/cli.js generate-gtm <artifact-dir>/event-schema.json --measurement-id <G-XXXXXXXXXX>` -> `gtm-config.json` |

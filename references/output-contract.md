@@ -11,7 +11,7 @@ After the artifact directory is chosen, downstream commands should keep reading 
 
 | File | Description |
 |------|-------------|
-| `site-analysis.json` | Raw page structure from Playwright crawl — pages, interactive elements, page groups |
+| `site-analysis.json` | Raw page structure from Playwright crawl — pages, interactive elements, page groups, and page-group confirmation metadata |
 | `schema-context.json` | Compressed crawl data for AI event generation (auto-generated, do not edit) |
 | `shopify-schema-template.json` | Shopify-only baseline event schema template generated during `prepare-schema`; use as the starting point for ecommerce custom events |
 | `shopify-bootstrap-review.md` | Shopify-only human-readable review of baseline and inferred bootstrap events, including why each one was included and whether it should be kept, reviewed manually, or removed |
@@ -30,6 +30,10 @@ After the artifact directory is chosen, downstream commands should keep reading 
 `event-schema.json` is the primary editable artifact. The agent presents it as a table and waits for user confirmation before proceeding to GTM config generation. Any edits made here flow through to all downstream steps.
 
 `site-analysis.json` is editable at Step 1.5 (page group confirmation). Changes to `pageGroups` affect event scoping in the schema.
+
+After the current grouping is approved, run `node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json`. That command stores a hash of the approved `pageGroups` snapshot in `site-analysis.json`.
+
+`prepare-schema` only continues when the stored confirmation hash still matches the current `pageGroups`. If the groups change later, the confirmation is treated as stale and must be recorded again.
 
 ## Re-running Steps
 

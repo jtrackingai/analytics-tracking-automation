@@ -73,6 +73,12 @@ If the user requests changes to groups:
 
 After changes, display updated table and ask for final confirmation.
 
+Once the user approves the current grouping, record that exact snapshot with:
+
+```bash
+node dist/cli.js confirm-page-groups <artifact-dir>/site-analysis.json
+```
+
 ## Anti-patterns
 
 - Claiming page groups exist when `pageGroups` is empty or crawl returned zero pages

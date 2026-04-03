@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { chromium, Browser, Page, Response } from 'playwright';
 import {
   extractDomain, isSameDomain, normalizeUrl, getSectionPrefix,
@@ -63,6 +64,12 @@ export interface PageGroup {
   representativeHtml?: string;
 }
 
+export interface PageGroupsReview {
+  status: 'pending' | 'confirmed';
+  confirmedAt?: string;
+  confirmedHash?: string;
+}
+
 export interface DataLayerEvent {
   event: string;
   keys: string[];
@@ -75,10 +82,55 @@ export interface SiteAnalysis {
   platform: SitePlatform;
   pages: PageAnalysis[];
   pageGroups: PageGroup[];
+  pageGroupsReview?: PageGroupsReview;
   discoveredUrls: string[];
   skippedUrls: string[];
   crawlWarnings: string[];
   dataLayerEvents: DataLayerEvent[];
+}
+
+function normalizedPageGroupHashKey(group: PageGroup): string {
+  return [
+    group.contentType,
+    group.name,
+    group.displayName,
+    group.description,
+    group.urlPattern,
+    group.representativeHtml || '',
+    [...group.urls].sort().join('\n'),
+  ].join('\u0000');
+}
+
+export function getPageGroupsHash(pageGroups: PageGroup[]): string {
+  const normalized = pageGroups
+    .map(group => ({
+      ...group,
+      urls: [...group.urls].sort(),
+    }))
+    .sort((a, b) => normalizedPageGroupHashKey(a).localeCompare(normalizedPageGroupHashKey(b)));
+
+  return crypto.createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+}
+
+export function getPageGroupsReviewState(analysis: SiteAnalysis): PageGroupsReview {
+  if (!analysis.pageGroupsReview) {
+    return { status: 'pending' };
+  }
+
+  if (analysis.pageGroupsReview.status !== 'confirmed' || !analysis.pageGroupsReview.confirmedHash) {
+    return { status: 'pending' };
+  }
+
+  return {
+    status: 'confirmed',
+    confirmedAt: analysis.pageGroupsReview.confirmedAt,
+    confirmedHash: analysis.pageGroupsReview.confirmedHash,
+  };
+}
+
+export function hasConfirmedPageGroups(analysis: SiteAnalysis): boolean {
+  const review = getPageGroupsReviewState(analysis);
+  return review.status === 'confirmed' && review.confirmedHash === getPageGroupsHash(analysis.pageGroups);
 }
 
 export interface CrawlOptions {
@@ -738,6 +790,7 @@ export async function analyzeSite(
     platform: mergePlatformDetections(detectedPlatforms),
     pages,
     pageGroups: [],
+    pageGroupsReview: { status: 'pending' },
     discoveredUrls,
     skippedUrls,
     crawlWarnings,
