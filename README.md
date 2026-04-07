@@ -79,9 +79,9 @@ If the package is installed or linked as a binary, the public command name is `e
 The repository now has:
 
 - one umbrella skill: `event-tracking-skill`
-- six phase-oriented subskills under `skills/`
+- seven phase-oriented subskills under `skills/`: `tracking-discover`, `tracking-group`, `tracking-live-gtm`, `tracking-schema`, `tracking-sync`, `tracking-verify`, `tracking-shopify`
 
-Use the umbrella skill for end-to-end or ambiguous requests. Use the phase skills when the user clearly wants only one part of the workflow, such as discovery, grouping, schema review, GTM sync, preview QA, or Shopify-specific handling.
+Use the umbrella skill for end-to-end or ambiguous requests. Use the phase skills when the user clearly wants only one part of the workflow, such as discovery, grouping, live GTM baseline review, schema review, GTM sync, preview QA, or Shopify-specific handling.
 
 See [docs/skills.md](docs/skills.md) for the full map.
 
@@ -151,7 +151,7 @@ GA4 Measurement ID is G-XXXXXXXXXX.
 Google tag ID is GT-XXXXXXX if needed.
 ```
 
-The skill creates the run artifact directory as `<output-root>/<url-slug>` and then walks through grouping, schema review, GTM generation, sync, preview, and publish.
+The skill creates the run artifact directory as `<output-root>/<url-slug>` and then walks through grouping, conditional live GTM baseline review, schema review, GTM generation, sync, preview, and publish.
 
 ### Use It As A CLI
 
@@ -163,10 +163,12 @@ Start with site analysis:
 
 The CLI creates the artifact directory automatically as `<output-root>/<url-slug>`, for example `./output/example_com`.
 
-After filling `pageGroups` in `./output/example_com/site-analysis.json`, continue with the same artifact directory:
+After filling and reviewing `pageGroups` in `./output/example_com/site-analysis.json`, continue with the same artifact directory:
 
 ```bash
 ./event-tracking confirm-page-groups ./output/example_com/site-analysis.json
+# If site-analysis.json detected real GTM public IDs, run this before prepare-schema:
+./event-tracking analyze-live-gtm ./output/example_com/site-analysis.json
 ./event-tracking prepare-schema ./output/example_com/site-analysis.json
 ./event-tracking validate-schema ./output/example_com/event-schema.json --check-selectors
 ./event-tracking generate-spec ./output/example_com/event-schema.json
@@ -181,6 +183,7 @@ Important workflow note:
 
 - `prepare-schema` requires `pageGroups` to already be filled in `site-analysis.json` and explicitly confirmed
 - after grouping pages, run `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json`
+- if `site-analysis.json` detected real GTM public IDs, run `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json` before `prepare-schema`
 - for generic sites, `event-schema.json` is authored after `prepare-schema` from `schema-context.json`
 - for Shopify sites, `prepare-schema` bootstraps `event-schema.json` automatically if it does not already exist
 
@@ -195,11 +198,12 @@ You do not need to run the full flow every time.
 | Inspect current progress | Any artifact directory or file inside it | artifact directory or file path | `./event-tracking status <artifact-dir>` |
 | Analyze a new site | Step 1 | URL, output root | `./event-tracking analyze <url> --output-root <dir>` |
 | Review or approve page groups | Step 2 | `site-analysis.json` | update `pageGroups`, then `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json` |
-| Author or review schema | Step 3 | confirmed `site-analysis.json` | `prepare-schema`, edit `event-schema.json`, `validate-schema`, `generate-spec`, `confirm-schema` |
-| Generate GTM config from an approved schema | Step 4 | `event-schema.json`, measurement ID | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <id>` |
-| Sync an approved GTM config | Step 5 | `gtm-config.json` | `./event-tracking sync <artifact-dir>/gtm-config.json` |
-| QA an existing GTM workspace | Step 6 | `event-schema.json`, `gtm-context.json` | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` |
-| Publish an already-verified workspace | Step 7 | `gtm-context.json` | `./event-tracking publish --context-file <artifact-dir>/gtm-context.json --version-name "GA4 Events v1"` |
+| Review the live GTM baseline before schema prep | Step 3 | approved `site-analysis.json` with detected live GTM IDs, or explicit primary GTM ID | `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json [--primary-container-id GTM-XXXXXXX]` |
+| Author or review schema | Step 4 | approved `site-analysis.json` or existing `event-schema.json` | `prepare-schema`, edit `event-schema.json`, `validate-schema`, `generate-spec`, `confirm-schema` |
+| Generate GTM config from an approved schema | Step 5 | `event-schema.json`, measurement ID | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <id>` |
+| Sync an approved GTM config | Step 6 | `gtm-config.json` | `./event-tracking sync <artifact-dir>/gtm-config.json` |
+| QA an existing GTM workspace | Step 7 | `event-schema.json`, `gtm-context.json` | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` |
+| Publish an already-verified workspace | Step 8 | `gtm-context.json` | `./event-tracking publish --context-file <artifact-dir>/gtm-context.json --version-name "GA4 Events v1"` |
 
 If a user already has an artifact directory, resume from the earliest unmet prerequisite instead of restarting from `analyze`.
 
@@ -223,7 +227,8 @@ The current workflow mixes agent-led review steps with CLI execution steps.
 | Analyze | CLI | Crawls the site and captures pages, shared UI, warnings, detected events, and platform signals | `./event-tracking analyze <url> --output-root <output-root>` -> `site-analysis.json` |
 | Page Grouping | Agent or user | Fills `pageGroups` in `site-analysis.json` by business purpose before schema preparation | updated `site-analysis.json` |
 | Page Group Confirmation | User + CLI | Reviews the current page groups and records explicit approval for the current `pageGroups` snapshot | `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json` -> updated `site-analysis.json` |
-| Prepare Schema Context | CLI | Compresses grouped analysis for schema authoring and bootstraps Shopify artifacts when needed | `./event-tracking prepare-schema <artifact-dir>/site-analysis.json` -> `schema-context.json`, Shopify bootstrap files |
+| Live GTM Baseline Audit | CLI | Reviews the site's real public GTM runtime before schema generation when live GTM container IDs were detected during analysis | `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json` -> `live-gtm-analysis.json`, `live-gtm-review.md` |
+| Prepare Schema Context | CLI | Compresses grouped analysis plus any reviewed live GTM baseline for schema authoring and bootstraps Shopify artifacts when needed | `./event-tracking prepare-schema <artifact-dir>/site-analysis.json` -> `schema-context.json`, Shopify bootstrap files |
 | Schema Authoring And Review | Agent or user + CLI validation | Creates or refines `event-schema.json`, validates selectors, generates a readable spec, and records schema approval | `validate-schema`, `generate-spec`, `confirm-schema` -> `event-schema.json`, `event-spec.md`, `workflow-state.json` |
 | GTM Generation | CLI | Converts the approved schema into GTM-ready tags, triggers, and variables | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <G-XXXXXXXXXX>` -> `gtm-config.json` |
 | GTM Sync | CLI | Authenticates with Google, requires explicit account/container/workspace selection, and syncs the generated configuration | `./event-tracking sync <artifact-dir>/gtm-config.json` -> `gtm-context.json`, `credentials.json` |
@@ -232,10 +237,10 @@ The current workflow mixes agent-led review steps with CLI execution steps.
 
 ## Generic vs Shopify Branch
 
-After `analyze`, the workflow splits into two branches:
+After `analyze`, the run still shares grouping, page-group approval, and live GTM baseline review when applicable before the generic and Shopify-specific schema behavior diverges:
 
-- `generic`: follow the standard page grouping, schema authoring, GTM sync, and automated preview flow
-- `shopify`: keep the same crawl and grouping steps, but use Shopify bootstrap artifacts, generate a Shopify custom pixel after `sync`, and use manual post-install verification instead of the normal automated browser preview
+- `generic`: follow the standard schema authoring, GTM sync, and automated preview flow
+- `shopify`: use Shopify bootstrap artifacts after the shared early stages, generate a Shopify custom pixel after `sync`, and use manual post-install verification instead of the normal automated browser preview
 
 Shopify-specific behavior today:
 
@@ -253,10 +258,12 @@ All generated files live inside one artifact directory for the run.
 | File | Description |
 | --- | --- |
 | `site-analysis.json` | Crawl output with pages, platform signals, and page groups |
+| `live-gtm-analysis.json` | Parsed summary of the site's real public GTM runtime, including existing live events and the primary comparison container |
+| `live-gtm-review.md` | Human-readable audit of the live GTM baseline and comparison findings |
 | `schema-context.json` | Compressed context used for event schema authoring |
 | `event-schema.json` | Primary editable tracking schema before GTM generation |
 | `event-spec.md` | Human-readable event spec for stakeholder review |
-| `workflow-state.json` | Machine-readable workflow checkpoint state, including schema approval, verification status, and next recommended step |
+| `workflow-state.json` | Machine-readable workflow checkpoint state, including live GTM baseline readiness, schema approval, verification status, and next recommended step |
 | `gtm-config.json` | GTM Web Container export plus tracking metadata |
 | `gtm-context.json` | Saved GTM account, container, and workspace IDs |
 | `credentials.json` | Local Google OAuth token cache for this artifact directory |
@@ -283,6 +290,7 @@ During `sync`, GTM target selection is a required user-confirmation step.
 - prefer `--output-root` for `analyze`; `--output-dir` is only a deprecated exact artifact-directory override
 - `analyze` supports partial mode with `--urls` for specific same-domain pages
 - `analyze` also supports `--storefront-password` for password-protected Shopify dev stores
+- when `site-analysis.json` contains real GTM public IDs, `prepare-schema` requires `analyze-live-gtm` first so schema design can compare against the current live baseline
 - `generate-gtm` will surface any custom dimensions that must be registered in GA4 before you continue
 - `generate-gtm` now requires a current schema confirmation; use `./event-tracking confirm-schema <artifact-dir>/event-schema.json` after schema review
 - selector-based events may still need review when the site uses unstable or highly dynamic markup

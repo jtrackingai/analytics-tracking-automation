@@ -53,6 +53,9 @@ Keep these rules stable unless you intentionally want to change the public surfa
 - installed copies under `$CODEX_HOME/skills` or `~/.codex/skills` are deployment output; regenerate and reinstall instead of editing them in place
 - linked installs under `$CODEX_HOME/skills` or `~/.codex/skills` point back to `dist/skill-bundles/`; regenerate exports after changing skill text or metadata
 - `references/architecture.md` and `references/skill-map.md` are the install-facing runtime references that should ship unchanged into exported bundles
+- `README.md`, `ARCHITECTURE.md`, `references/architecture.md`, `SKILL.md`, and `references/output-contract.md` should agree on workflow checkpoints, prerequisite artifacts, produced artifacts, and resume semantics
+- conditional gates such as `analyze-live-gtm` before `prepare-schema` must be documented in workflow tables and quick-start snippets, not only in phase skills
+- skill counts and phase names in docs should stay aligned with `skills/manifest.json`
 - artifact filenames in [references/output-contract.md](references/output-contract.md) are part of the public workflow contract
 - `workflow-state.json` is part of the public workflow contract once generated
 - when adding a new workflow step, document its prerequisite artifact and produced artifact explicitly
@@ -109,8 +112,10 @@ If you change CLI behavior:
 - inspect `dist/skill-bundles/` after regeneration when the change should affect exported skill packaging
 - rerun the installer when the change should affect installed skill contents
 - if you use link mode locally, rerun `npm run export:skills` after changing skill text or metadata so the linked target refreshes in place
+- update workflow snippets and entry-point tables in [README.md](README.md) when phase order, conditional gates, or branch behavior changes
 - update [ARCHITECTURE.md](ARCHITECTURE.md) when the artifact lifecycle or branch behavior changes
-- update [docs/skills.md](docs/skills.md) when skill boundaries change
+- update [references/architecture.md](references/architecture.md) when install-facing artifact lifecycle or resume semantics change
+- update [docs/skills.md](docs/skills.md) and [references/skill-map.md](references/skill-map.md) when skill boundaries or phase inventory change
 - keep command examples and next-step prompts aligned with the public interface
 - keep the root `SKILL.md` at umbrella-skill scope; push detailed instructions down into phase skills or references when it starts growing again
 
@@ -126,8 +131,8 @@ If you change artifact files:
 - run `npm run check`
 - run `npm test` when changing workflow-state or gate behavior locally before the full check
 - confirm new examples use `./event-tracking`
-- confirm `README.md`, `SKILL.md`, and `references/output-contract.md` agree on artifact names
-- confirm `docs/skills.md` and `skills/*/SKILL.md` still match the current phase boundaries
+- confirm `README.md`, `ARCHITECTURE.md`, `references/architecture.md`, `SKILL.md`, and `references/output-contract.md` agree on checkpoints, gates, and artifact names
+- confirm `docs/skills.md`, `references/skill-map.md`, and `skills/*/SKILL.md` still match the current phase boundaries and phase inventory
 - confirm `skills/manifest.json` still matches the actual shipped skill family
 - confirm `agents/openai.yaml` files still match skill names and intended invocation mode
 - confirm exported bundles under `dist/skill-bundles/` use `event-tracking` rather than `./event-tracking`

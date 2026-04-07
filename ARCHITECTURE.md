@@ -38,6 +38,7 @@ All workflow state lives inside a single artifact directory for one site run.
 | `analyzed` | site URL | `site-analysis.json` | CLI-enforced |
 | `grouped` | `site-analysis.json` | updated `pageGroups` | human/agent workflow |
 | `group_approved` | grouped `site-analysis.json` | `pageGroupsReview.confirmedHash` in `site-analysis.json` | CLI-enforced |
+| `live_gtm_analyzed` | approved `site-analysis.json` when live GTM IDs are detected | `live-gtm-analysis.json`, `live-gtm-review.md` | CLI-enforced when live GTM is present |
 | `schema_prepared` | approved `site-analysis.json` | `schema-context.json`, Shopify bootstrap artifacts when applicable | CLI-enforced |
 | `schema_approved` | `event-schema.json` | approved schema hash in `workflow-state.json` and optional `event-spec.md` | CLI-enforced |
 | `gtm_generated` | approved `event-schema.json` | `gtm-config.json` | CLI-enforced |
@@ -48,12 +49,13 @@ All workflow state lives inside a single artifact directory for one site run.
 Notes:
 
 - `group_approved` is enforced by `prepare-schema`.
+- `prepare-schema` also enforces `live_gtm_analyzed` when `site-analysis.json` detected real GTM container IDs.
 - `schema_approved` is enforced by `generate-gtm`, which now requires a matching confirmed schema hash in `workflow-state.json` unless explicitly forced.
 - `verified` and `published` are recorded in `workflow-state.json` after the corresponding commands complete.
 
 ## Branching Model
 
-The workflow branches after `analyze`:
+The workflow branches after the shared early stages:
 
 - `generic`: standard schema authoring, GTM sync, automated browser preview, then publish
 - `shopify`: same crawl and grouping flow, Shopify bootstrap schema, custom pixel artifacts after sync, manual verification guidance instead of normal automated preview
@@ -63,6 +65,7 @@ Shared early stages:
 - `analyze`
 - page grouping
 - page-group approval
+- live GTM baseline audit when applicable
 - schema preparation
 
 Shopify-specific outputs:
@@ -79,7 +82,7 @@ The system should support partial intent, not just full end-to-end runs.
 Resume rules:
 
 - if the user only wants analysis, stop after `analyzed`
-- if the user provides `site-analysis.json`, continue from grouping or schema prep depending on whether `pageGroups` and `pageGroupsReview` are already present
+- if the user provides `site-analysis.json`, continue from grouping, live GTM baseline review, or schema prep depending on page-group approval and whether detected live GTM IDs have already been reviewed
 - if the user provides `event-schema.json`, treat schema review and GTM generation as the default next stages
 - if the user provides `gtm-config.json`, skip directly to `sync`
 - if the user provides `gtm-context.json`, skip directly to `preview` or `publish`
@@ -95,6 +98,7 @@ It records:
 - current checkpoint
 - completed checkpoints
 - page-group review state
+- live GTM baseline readiness
 - schema review state
 - verification status
 - publish status
@@ -120,6 +124,7 @@ The phase skills exist to narrow scope and stop boundaries:
 
 - `tracking-discover`
 - `tracking-group`
+- `tracking-live-gtm`
 - `tracking-schema`
 - `tracking-sync`
 - `tracking-verify`
