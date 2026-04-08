@@ -246,10 +246,10 @@ The current workflow mixes agent-led review steps with CLI execution steps.
 | Page Group Confirmation | User + CLI | Reviews the current page groups and records explicit approval for the current `pageGroups` snapshot | `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json` -> updated `site-analysis.json` |
 | Live GTM Baseline Audit | CLI | Reviews the site's real public GTM runtime before schema generation when live GTM container IDs were detected during analysis | `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json` -> `live-gtm-analysis.json`, `live-gtm-review.md` |
 | Prepare Schema Context | CLI | Compresses grouped analysis plus any reviewed live GTM baseline for schema authoring and bootstraps Shopify artifacts when needed | `./event-tracking prepare-schema <artifact-dir>/site-analysis.json` -> `schema-context.json`, Shopify bootstrap files |
-| Schema Authoring And Review | Agent or user + CLI validation | Creates or refines `event-schema.json`, validates selectors, generates a readable spec, records schema approval, and keeps restore/audit history | `validate-schema`, `generate-spec`, `confirm-schema` -> `event-schema.json`, `event-spec.md`, `schema-decisions.jsonl`, `schema-restore/`, `workflow-state.json` |
+| Schema Authoring And Review | Agent or user + CLI validation | Creates or refines `event-schema.json`, validates selectors, generates a readable spec, emits a live-baseline comparison report when available, records schema approval, and keeps restore/audit history | `validate-schema`, `generate-spec`, `confirm-schema` -> `event-schema.json`, `event-spec.md`, `tracking-plan-comparison.md` (when live baseline exists), `schema-decisions.jsonl`, `schema-restore/`, `workflow-state.json` |
 | GTM Generation | CLI | Converts the approved schema into GTM-ready tags, triggers, and variables | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <G-XXXXXXXXXX>` -> `gtm-config.json` |
 | GTM Sync | CLI | Authenticates with Google, requires explicit account/container/workspace selection, and syncs the generated configuration | `./event-tracking sync <artifact-dir>/gtm-config.json` -> `gtm-context.json`, `credentials.json` |
-| Verification | CLI | Runs GTM preview for generic sites, records unexpected fired events, writes tracking health plus timestamped health history, or writes a Shopify manual verification guide instead | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` -> `preview-report.md`, `preview-result.json`, `tracking-health.json`, `tracking-health-history/` |
+| Verification | CLI | Runs GTM preview for generic sites, records unexpected fired events, writes tracking health JSON plus a human-readable health report and timestamped health history, or writes a Shopify manual verification guide instead | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` -> `preview-report.md`, `preview-result.json`, `tracking-health.json`, `tracking-health-report.md`, `tracking-health-history/` |
 | Publish | CLI | Publishes the validated GTM workspace as a new container version, but only after current tracking health is present and non-blocking unless the user explicitly passes `--force` | `./event-tracking publish --context-file <artifact-dir>/gtm-context.json --version-name "GA4 Events v1"` |
 
 ## Generic vs Shopify Branch
@@ -280,6 +280,7 @@ Most generated files live inside one artifact directory for the run. The output 
 | `schema-context.json` | Compressed context used for event schema authoring |
 | `event-schema.json` | Primary editable tracking schema before GTM generation |
 | `event-spec.md` | Human-readable event spec for stakeholder review |
+| `tracking-plan-comparison.md` | Human-readable comparison between existing live GTM tracking and the proposed event plan, including optimization points, benefits, and legacy issues (generated when `live-gtm-analysis.json` exists) |
 | `schema-decisions.jsonl` | Append-only schema confirmation audit |
 | `schema-restore/` | Confirmed schema restore snapshots keyed by schema hash |
 | `.event-tracking-run.json` | Run-context metadata that pins the artifact directory back to its output root for resume and indexing |
@@ -290,6 +291,7 @@ Most generated files live inside one artifact directory for the run. The output 
 | `preview-report.md` | Human-readable verification report |
 | `preview-result.json` | Raw preview verification data, including unexpected fired events outside the current schema |
 | `tracking-health.json` | Preview health score, blockers, recommendations, unexpected-event summary, and optional baseline diff; Shopify manual mode uses `score: null` |
+| `tracking-health-report.md` | Human-readable tracking health summary (score/grade, blockers, recommendations, event status, and optional baseline comparison) |
 | `tracking-health-history/` | Timestamped snapshots of every generated tracking health report |
 | `shopify-schema-template.json` | Shopify-only bootstrap schema template |
 | `shopify-bootstrap-review.md` | Shopify-only bootstrap review summary |

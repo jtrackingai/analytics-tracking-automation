@@ -23,6 +23,7 @@ After the artifact directory is chosen, downstream commands should keep reading 
 | `shopify-bootstrap-review.md` | Shopify-only human-readable review of baseline and inferred bootstrap events, including why each one was included and whether it should be kept, reviewed manually, or removed |
 | `event-schema.json` | GA4 event plan — editable before generating GTM config. For Shopify runs, `prepare-schema` bootstraps this file automatically if it does not already exist |
 | `event-spec.md` | Human-readable event specification for stakeholder review |
+| `tracking-plan-comparison.md` | Human-readable comparison of existing live GTM tracking vs the generated event plan, including optimization points, expected benefits, and legacy issues; generated when `live-gtm-analysis.json` is present |
 | `schema-decisions.jsonl` | Append-only schema confirmation audit, including added, changed, removed, and unchanged events compared with the previous confirmed snapshot when available |
 | `schema-restore/` | Restore snapshots of confirmed `event-schema.json` versions, keyed by schema hash |
 | `.event-tracking-run.json` | Run-context metadata for output-root recovery and run indexing |
@@ -33,6 +34,7 @@ After the artifact directory is chosen, downstream commands should keep reading 
 | `preview-report.md` | Human-readable event firing verification report (failures categorized by type) |
 | `preview-result.json` | Raw preview intercept data, including unexpected fired events outside the approved schema |
 | `tracking-health.json` | Machine-readable preview health score, blockers, recommendations, unexpected-event summary, and optional baseline diff; Shopify manual verification uses `score: null` |
+| `tracking-health-report.md` | Human-readable tracking-health summary (score/grade, blockers, recommendations, event status, and optional baseline comparison) |
 | `tracking-health-history/` | Timestamped snapshots of every generated tracking health report |
 | `shopify-custom-pixel.js` | Shopify-only artifact generated after `sync`; installs GTM inside Shopify Customer Events and bridges Shopify standard events into `dataLayer` |
 | `shopify-install.md` | Shopify-only install instructions for the generated custom pixel |
@@ -75,6 +77,7 @@ Example:
   live-gtm-analysis.json
   live-gtm-review.md
   event-schema.json
+  tracking-plan-comparison.md
   schema-decisions.jsonl
   schema-restore/
   .event-tracking-run.json
@@ -85,6 +88,7 @@ Example:
   preview-report.md
   preview-result.json
   tracking-health.json
+  tracking-health-report.md
   tracking-health-history/
   shopify-bootstrap-review.md   # Shopify only
   shopify-schema-template.json   # Shopify only

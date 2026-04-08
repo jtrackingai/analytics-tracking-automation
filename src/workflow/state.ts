@@ -72,6 +72,7 @@ export interface WorkflowArtifacts {
   schemaContext: boolean;
   eventSchema: boolean;
   eventSpec: boolean;
+  trackingPlanComparison: boolean;
   schemaDecisionAudit: boolean;
   schemaRestore: boolean;
   gtmConfig: boolean;
@@ -80,6 +81,7 @@ export interface WorkflowArtifacts {
   previewReport: boolean;
   previewResult: boolean;
   trackingHealth: boolean;
+  trackingHealthReport: boolean;
   trackingHealthHistory: boolean;
   shopifySchemaTemplate: boolean;
   shopifyBootstrapReview: boolean;
@@ -118,6 +120,7 @@ interface WorkflowFiles {
   schemaContext: string;
   eventSchema: string;
   eventSpec: string;
+  trackingPlanComparison: string;
   schemaDecisionAudit: string;
   schemaRestore: string;
   gtmConfig: string;
@@ -126,6 +129,7 @@ interface WorkflowFiles {
   previewReport: string;
   previewResult: string;
   trackingHealth: string;
+  trackingHealthReport: string;
   trackingHealthHistory: string;
   shopifySchemaTemplate: string;
   shopifyBootstrapReview: string;
@@ -169,6 +173,7 @@ function getWorkflowFiles(artifactDir: string): WorkflowFiles {
     schemaContext: path.join(artifactDir, 'schema-context.json'),
     eventSchema: path.join(artifactDir, 'event-schema.json'),
     eventSpec: path.join(artifactDir, 'event-spec.md'),
+    trackingPlanComparison: path.join(artifactDir, 'tracking-plan-comparison.md'),
     schemaDecisionAudit: path.join(artifactDir, 'schema-decisions.jsonl'),
     schemaRestore: path.join(artifactDir, 'schema-restore'),
     gtmConfig: path.join(artifactDir, 'gtm-config.json'),
@@ -177,6 +182,7 @@ function getWorkflowFiles(artifactDir: string): WorkflowFiles {
     previewReport: path.join(artifactDir, 'preview-report.md'),
     previewResult: path.join(artifactDir, 'preview-result.json'),
     trackingHealth: path.join(artifactDir, 'tracking-health.json'),
+    trackingHealthReport: path.join(artifactDir, 'tracking-health-report.md'),
     trackingHealthHistory: path.join(artifactDir, TRACKING_HEALTH_HISTORY_DIR),
     shopifySchemaTemplate: path.join(artifactDir, 'shopify-schema-template.json'),
     shopifyBootstrapReview: path.join(artifactDir, 'shopify-bootstrap-review.md'),
@@ -501,6 +507,7 @@ export function buildWorkflowState(artifactDir: string, previousState?: Workflow
     schemaContext: fileExists(files.schemaContext),
     eventSchema: fileExists(files.eventSchema),
     eventSpec: fileExists(files.eventSpec),
+    trackingPlanComparison: fileExists(files.trackingPlanComparison),
     schemaDecisionAudit: fileExists(files.schemaDecisionAudit),
     schemaRestore: fileExists(files.schemaRestore),
     gtmConfig: fileExists(files.gtmConfig),
@@ -509,6 +516,7 @@ export function buildWorkflowState(artifactDir: string, previousState?: Workflow
     previewReport: fileExists(files.previewReport),
     previewResult: fileExists(files.previewResult),
     trackingHealth: fileExists(files.trackingHealth),
+    trackingHealthReport: fileExists(files.trackingHealthReport),
     trackingHealthHistory: fileExists(files.trackingHealthHistory),
     shopifySchemaTemplate: fileExists(files.shopifySchemaTemplate),
     shopifyBootstrapReview: fileExists(files.shopifyBootstrapReview),

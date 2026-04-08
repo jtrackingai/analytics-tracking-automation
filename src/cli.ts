@@ -24,6 +24,8 @@ import { buildExistingTrackingBaseline, compareSchemaToLiveTracking } from './ge
 import { checkSelectors } from './generator/selector-check';
 import { runPreviewVerification, checkGTMOnPage } from './gtm/preview';
 import { generatePreviewReport } from './reporter/preview-report';
+import { generateTrackingPlanComparisonReport } from './reporter/tracking-plan-comparison';
+import { TRACKING_HEALTH_REPORT_FILE, writeTrackingHealthReportMarkdown } from './reporter/tracking-health-report';
 import { analyzeLiveGtmContainers, generateLiveGtmReviewMarkdown, LiveGtmAnalysis } from './gtm/live-parser';
 import { isShopifyPlatform } from './crawler/platform-detector';
 import { generateShopifyPixelArtifacts } from './shopify/pixel';
@@ -1148,6 +1150,7 @@ program
       const dir = path.dirname(schemaFile);
       const { reportFile, jsonFile } = writeShopifyPreviewInstructions(dir, siteAnalysis, gtmPublicId);
       const healthFile = path.join(dir, TRACKING_HEALTH_FILE);
+      const healthReportFile = path.join(dir, TRACKING_HEALTH_REPORT_FILE);
       const manualTrackingHealth = buildManualTrackingHealthReport({
         siteUrl: siteAnalysis.rootUrl,
         gtmContainerId: gtmPublicId,
@@ -1156,6 +1159,7 @@ program
         totalSchemaEvents: schema.events.length,
       });
       writeTrackingHealthReport(healthFile, manualTrackingHealth);
+      writeTrackingHealthReportMarkdown(healthReportFile, manualTrackingHealth);
       const historyFile = writeTrackingHealthHistory(dir, manualTrackingHealth);
       refreshAndIndexWorkflowState(dir, {
         verification: {
@@ -1168,6 +1172,7 @@ program
       console.log(`   Manual verification guide saved to: ${reportFile}`);
       console.log(`   Preview metadata saved to: ${jsonFile}`);
       console.log(`   Tracking health saved to: ${healthFile}`);
+      console.log(`   Tracking health report saved to: ${healthReportFile}`);
       console.log(`   Tracking health history saved to: ${historyFile}`);
       console.log(`\n   Next step: install the Shopify custom pixel, publish the GTM workspace, and validate in GA4 Realtime.`);
       return;
@@ -1234,12 +1239,14 @@ program
     const jsonFile = path.join(dir, 'preview-result.json');
     fs.writeFileSync(jsonFile, JSON.stringify(previewResult, null, 2));
     const healthFile = path.join(dir, TRACKING_HEALTH_FILE);
+    const healthReportFile = path.join(dir, TRACKING_HEALTH_REPORT_FILE);
     const baselineFile = opts.baseline?.trim()
       ? path.resolve(opts.baseline)
       : (fs.existsSync(healthFile) ? healthFile : undefined);
     const baselineHealth = baselineFile ? readTrackingHealthReport(baselineFile) : null;
     const trackingHealth = buildTrackingHealthReport(previewResult, baselineHealth, baselineFile);
     writeTrackingHealthReport(healthFile, trackingHealth);
+    writeTrackingHealthReportMarkdown(healthReportFile, trackingHealth);
     const historyFile = writeTrackingHealthHistory(dir, trackingHealth);
     refreshAndIndexWorkflowState(dir, {
       verification: {
@@ -1258,6 +1265,7 @@ program
     console.log(`\n✅ Report saved to: ${reportFile}`);
     console.log(`   Raw data saved to: ${jsonFile}`);
     console.log(`   Tracking health saved to: ${healthFile} (score ${formatTrackingHealthScore(trackingHealth.score)}, ${trackingHealth.grade})`);
+    console.log(`   Tracking health report saved to: ${healthReportFile}`);
     console.log(`   Tracking health history saved to: ${historyFile}`);
     if (trackingHealth.baseline) {
       if (typeof trackingHealth.baseline.scoreDelta === 'number') {
@@ -1422,12 +1430,14 @@ program
       ['schema-context.json', workflowState.artifacts.schemaContext],
       ['event-schema.json', workflowState.artifacts.eventSchema],
       ['event-spec.md', workflowState.artifacts.eventSpec],
+      ['tracking-plan-comparison.md', workflowState.artifacts.trackingPlanComparison],
       ['schema-decisions.jsonl', workflowState.artifacts.schemaDecisionAudit],
       ['schema-restore/', workflowState.artifacts.schemaRestore],
       ['gtm-config.json', workflowState.artifacts.gtmConfig],
       ['gtm-context.json', workflowState.artifacts.gtmContext],
       ['preview-report.md', workflowState.artifacts.previewReport],
       [TRACKING_HEALTH_FILE, workflowState.artifacts.trackingHealth],
+      [TRACKING_HEALTH_REPORT_FILE, workflowState.artifacts.trackingHealthReport],
       [TRACKING_HEALTH_HISTORY_DIR, workflowState.artifacts.trackingHealthHistory],
       [RUN_CONTEXT_FILE, fs.existsSync(path.join(workflowState.artifactDir, RUN_CONTEXT_FILE))],
       [WORKFLOW_STATE_FILE, true],
@@ -1534,6 +1544,7 @@ program
     const liveAnalysis = tryReadJsonFile<LiveGtmAnalysis>(path.join(artifactDir, 'live-gtm-analysis.json'));
     const baseline = liveAnalysis ? buildExistingTrackingBaseline(liveAnalysis) : null;
     const liveDelta = liveAnalysis ? compareSchemaToLiveTracking(schema, liveAnalysis) : null;
+    const comparisonOutFile = path.join(artifactDir, 'tracking-plan-comparison.md');
 
     const lines: string[] = [
       `# GA4 Event Tracking Specification`,
@@ -1699,6 +1710,16 @@ program
     const spec = lines.join('\n');
     const outFile = path.join(artifactDir, 'event-spec.md');
     fs.writeFileSync(outFile, spec, 'utf-8');
+
+    if (baseline && liveDelta) {
+      const comparisonReport = generateTrackingPlanComparisonReport({
+        schema,
+        baseline,
+        liveDelta,
+      });
+      fs.writeFileSync(comparisonOutFile, comparisonReport, 'utf-8');
+    }
+
     refreshAndIndexWorkflowState(artifactDir);
 
     console.log(`\n✅ Event spec generated: ${outFile}`);
@@ -1707,6 +1728,9 @@ program
       console.log(`   Live baseline comparison: ${liveDelta.reusedEventCount} reused, ${liveDelta.newEventCount} new`);
       if (liveDelta.problemsSolved.length > 0) {
         console.log(`   Solves: ${liveDelta.problemsSolved[0]}`);
+      }
+      if (baseline) {
+        console.log(`   Comparison report: ${comparisonOutFile}`);
       }
     }
     if (quota.customDimensions > 0) {

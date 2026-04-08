@@ -18,6 +18,10 @@ const {
   writeTrackingHealthHistory,
 } = require(path.join(repoRoot, 'dist', 'reporter', 'tracking-health.js'));
 const {
+  TRACKING_HEALTH_REPORT_FILE,
+  writeTrackingHealthReportMarkdown,
+} = require(path.join(repoRoot, 'dist', 'reporter', 'tracking-health-report.js'));
+const {
   RUN_CONTEXT_FILE,
   resolveOutputRootForArtifact,
   upsertRunContext,
@@ -122,6 +126,41 @@ function makeEventSchema(events = [makeEvent()]) {
   };
 }
 
+function makeLiveGtmAnalysis(overrides = {}) {
+  return {
+    siteUrl: 'https://example.com',
+    analyzedAt: '2026-04-08T00:00:00.000Z',
+    detectedContainerIds: ['GTM-TEST123'],
+    primaryContainerId: 'GTM-TEST123',
+    containers: [
+      {
+        publicId: 'GTM-TEST123',
+        sourceUrl: 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST123',
+        analyzedAt: '2026-04-08T00:00:00.000Z',
+        resourceVersion: '1',
+        measurementIds: ['G-TEST1234'],
+        configTagIds: ['10'],
+        events: [],
+        warnings: [],
+      },
+    ],
+    aggregatedEvents: [
+      {
+        eventName: 'signup_click',
+        containers: ['GTM-TEST123'],
+        measurementIds: ['G-TEST1234'],
+        parameterNames: ['link_text'],
+        triggerTypes: ['click'],
+        selectors: ['button.signup'],
+        urlPatterns: ['^/$'],
+        confidence: 'high',
+      },
+    ],
+    warnings: [],
+    ...overrides,
+  };
+}
+
 function makeTrackingHealthReport(overrides = {}) {
   return {
     schemaVersion: 1,
@@ -154,6 +193,43 @@ function makeTrackingHealthReport(overrides = {}) {
     ...overrides,
   };
 }
+
+test('generate-spec writes tracking-plan-comparison.md when live GTM baseline is available', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  writeJson(schemaFile, makeEventSchema([
+    makeEvent('signup_click', {
+      parameters: [
+        { name: 'page_location', value: '{{Page URL}}', description: 'Current page URL' },
+        { name: 'page_title', value: '{{Page Title}}', description: 'Current page title' },
+        { name: 'link_text', value: '{{Click Text}}', description: 'Clicked text' },
+      ],
+    }),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]));
+  writeJson(path.join(artifactDir, 'live-gtm-analysis.json'), makeLiveGtmAnalysis({
+    warnings: ['Some trigger conditions were inferred from public GTM runtime data.'],
+  }));
+
+  const result = runCli(['generate-spec', schemaFile]);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /Comparison report:/);
+
+  const comparisonFile = path.join(artifactDir, 'tracking-plan-comparison.md');
+  assert.ok(fs.existsSync(comparisonFile), 'comparison report should be generated');
+
+  const comparison = fs.readFileSync(comparisonFile, 'utf8');
+  assert.match(comparison, /# Tracking Plan Comparison Report/);
+  assert.match(comparison, /\| Existing tracking problem \| Optimization in new plan \| Expected benefit \|/);
+  assert.match(comparison, /\| Event \| Existing live payload params \| New plan payload params \| Optimization \| Benefit \| Legacy issue \|/);
+  assert.match(comparison, /Live event payload lacked consistent page context fields\./);
+  assert.match(comparison, /Some trigger conditions were inferred from public GTM runtime data\./);
+
+  const workflowState = readJson(path.join(artifactDir, 'workflow-state.json'));
+  assert.equal(workflowState.artifacts.trackingPlanComparison, true);
+});
 
 test('status --json and runs --json expose a run index for resumed workflows', t => {
   const outputRoot = makeTempDir();
@@ -340,6 +416,39 @@ test('tracking health history writes timestamped snapshots without overwriting t
 
   assert.match(historyFile, /tracking-health-history\/2026-04-08T00-03-04\.000Z\.json$/);
   assert.equal(readJson(historyFile).generatedAt, '2026-04-08T00:03:04.000Z');
+});
+
+test('tracking health markdown report is generated and workflow state marks it as present', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const reportFile = path.join(artifactDir, TRACKING_HEALTH_REPORT_FILE);
+  writeTrackingHealthReportMarkdown(reportFile, makeTrackingHealthReport({
+    score: 68,
+    grade: 'warning',
+    blockers: ['1 selector mismatch(es) need schema or GTM trigger updates.'],
+    recommendations: ['Fix selector mismatches and rerun preview.'],
+    baseline: {
+      previousScore: 54,
+      scoreDelta: 14,
+      fixedEvents: ['signup_click'],
+      newFailures: ['pricing_click'],
+      changedEvents: [],
+    },
+  }));
+
+  const markdown = fs.readFileSync(reportFile, 'utf8');
+  assert.match(markdown, /# Tracking Health Report/);
+  assert.match(markdown, /\| Score \| 68\/100 \|/);
+  assert.match(markdown, /## Baseline Comparison/);
+  assert.match(markdown, /pricing_click/);
+
+  writeJson(path.join(artifactDir, 'tracking-health.json'), makeTrackingHealthReport({
+    score: 68,
+    grade: 'warning',
+  }));
+  const state = refreshWorkflowState(artifactDir);
+  assert.equal(state.artifacts.trackingHealthReport, true);
 });
 
 test('run context preserves explicit output roots and falls back after artifact migration', t => {
