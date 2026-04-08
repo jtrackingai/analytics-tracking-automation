@@ -19,6 +19,10 @@ function printHelp() {
 
 Install exported event-tracking skill bundles into an agent skills directory.
 
+This installer requires a local checkout of this repository.
+If you do not want a local checkout, use:
+  npx skills add jtrackingai/event-tracking-skill
+
 Fast paths:
   npm run install:skills
       Install only the umbrella skill into the default target.

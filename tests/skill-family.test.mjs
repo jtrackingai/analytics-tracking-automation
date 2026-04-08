@@ -122,9 +122,11 @@ test('Codex install docs cover the default minimal install and optional phase in
   assert.match(genericGuide, /Agent Install Guide/, 'A shared agent install guide should exist.');
   assert.match(genericGuide, /--target-dir \/path\/to\/agent\/skills/, 'The shared guide should explain portable target-dir installs.');
   assert.match(genericGuide, /--with-phases/, 'The shared guide should show how to install the full phase family explicitly.');
+  assert.match(genericGuide, /cloned this repository locally|local checkout/, 'The shared guide should make the local-checkout prerequisite explicit.');
   assert.match(genericGuide, /auto-update/i, 'The shared guide should explain auto-update behavior.');
   assert.match(codexGuide, /--mode link/, 'Codex guide should document link mode.');
   assert.match(codexGuide, /--with-phases/, 'Codex guide should show how to install the full phase family explicitly.');
+  assert.match(codexGuide, /cloned this repository locally|local checkout/, 'Codex guide should make the local-checkout prerequisite explicit.');
   assert.match(codexGuide, /README\.install\.md/, 'Codex guide should point back to the shared install guide.');
   assert.match(codexGuide, /auto-update/i, 'Codex guide should mention installed auto-update behavior.');
   assert.match(bootstrapNote, /npm run install:skills/, '.codex bootstrap note should expose the minimal install entry point.');
@@ -134,4 +136,5 @@ test('Codex install docs cover the default minimal install and optional phase in
   assert.match(readme, /\[docs\/README\.install\.md\]\(docs\/README\.install\.md\)/, 'README should link to the shared install guide.');
   assert.match(readme, /\[docs\/README\.codex\.md\]\(docs\/README\.codex\.md\)/, 'README should link to the Codex guide.');
   assert.match(readme, /Most users only need the umbrella skill\./, 'README should keep the default install path minimal and explicit.');
+  assert.match(readme, /do not want to clone the repository/, 'README should distinguish the no-clone path from the repo-based installer path.');
 });

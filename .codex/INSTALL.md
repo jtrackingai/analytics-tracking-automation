@@ -1,10 +1,12 @@
-Install the default umbrella skill into Codex from the repository root with:
+After cloning this repository and entering its root, install the default umbrella skill into Codex with:
 
 ```bash
 npm run install:skills
 ```
 
 This copy-mode install is also the path that enables installed auto-update checks.
+
+You do not need `npm ci` just to install the exported skill bundles.
 
 If you want the full phase-oriented skill family installed together, use:
 

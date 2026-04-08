@@ -29,13 +29,23 @@ For a given website, this skill can help you:
 
 ### Install Into A Local Agent Skills Directory (Recommended)
 
-Most users only need the umbrella skill. Keep that path minimal:
+There are two install paths:
+
+- if you already have this repository checked out locally, use the built-in installer below
+- if you do not want to clone the repository, skip to `npx skills add ...`
+
+Most users only need the umbrella skill.
+
+If you want the built-in installer, first clone the repo and run the installer from the repo root:
 
 ```bash
+git clone https://github.com/jtrackingai/event-tracking-skill.git
+cd event-tracking-skill
 npm run install:skills
 ```
 
 That installs `event-tracking-skill` into the default skills directory with installer-managed auto-update metadata.
+You do not need `npm ci` just to install the exported skill bundles.
 
 If you already know you want the full phase-oriented family installed together, make that explicit:
 
@@ -90,6 +100,7 @@ Use [docs/README.install.md](docs/README.install.md) for the full shared agent-i
 ```
 
 That installs dependencies, builds the CLI, and runs a basic environment check.
+Use this only when you also want the repo-local CLI or local development environment. It is not required for `npm run install:skills`.
 
 If you are also preparing the repo for local iteration on the skill family itself, you can combine setup and install:
 
@@ -99,7 +110,7 @@ If you are also preparing the repo for local iteration on the skill family itsel
 
 ### Install with skills.sh (Alternative)
 
-Use this if you want to install the skill into your local agent skills directory and start using it right away.
+Use this if you want to install the skill into your local agent skills directory without cloning the repository first.
 
 ```bash
 npx skills add jtrackingai/event-tracking-skill

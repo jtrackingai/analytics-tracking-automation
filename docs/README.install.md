@@ -6,13 +6,20 @@ This is the shared installation path across agent runtimes. Platform-specific no
 
 ## Recommended Path
 
-From the repository root:
+This installer path assumes you already cloned this repository locally and are running commands from the repository root.
+
+If you do not want a local checkout, use `npx skills add jtrackingai/event-tracking-skill` on the root skill instead.
+
+From a local checkout:
 
 ```bash
+git clone https://github.com/jtrackingai/event-tracking-skill.git
+cd event-tracking-skill
 npm run install:skills
 ```
 
 That keeps the default install surface minimal by installing only the umbrella skill into the default install target.
+You do not need `npm ci` just to install the exported skill bundles.
 
 If you want the full phase-oriented family installed together:
 
@@ -27,6 +34,8 @@ If you also want the repo-local CLI and development checks prepared in one pass:
 ```bash
 ./setup --install-skills --with-phases
 ```
+
+Use `./setup` only when you also want dependencies, the repo-local CLI, and local development checks.
 
 ## Default Install Target
 

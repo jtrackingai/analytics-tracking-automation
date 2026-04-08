@@ -6,13 +6,20 @@ The generic installer flow now lives in [README.install.md](README.install.md). 
 
 ## Fast Path
 
-From the repository root:
+This installer path assumes you already cloned this repository locally and are running commands from the repository root.
+
+If you do not want a local checkout, use `npx skills add jtrackingai/event-tracking-skill` instead.
+
+From a local checkout:
 
 ```bash
+git clone https://github.com/jtrackingai/event-tracking-skill.git
+cd event-tracking-skill
 npm run install:skills
 ```
 
 That installs only `event-tracking-skill` into the default Codex skills directory so the first install stays minimal.
+You do not need `npm ci` just to install the exported skill bundles.
 
 If you want the full phase-oriented family installed together:
 
