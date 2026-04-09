@@ -62,6 +62,27 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 12. Use `./event-tracking scenario-transition <artifact-dir> --to <scenario> [--reason ...]` when the user wants an auditable handoff between scenarios.
 13. Do not continue past the phase boundary the user asked for. Stop after the requested phase unless the user explicitly asks to continue.
 
+## Conversation Intake
+
+When the user enters through chat and has not yet provided a bounded phase, artifact directory, or exact command, start with an intent-first intake.
+
+Classify the request into one of these entry intents:
+
+- `resume_existing_run`: the user already has an artifact directory or one of its files; inspect the artifacts and use `status`
+- `new_setup`: net-new tracking implementation from scratch; prefer `run-new-setup`, then follow its recommended next step
+- `tracking_update`: revise or extend an existing implementation; prefer `run-tracking-update`
+- `upkeep`: routine maintenance, review, or incremental QA on an existing setup; prefer `run-upkeep`
+- `tracking_health_audit`: audit-only assessment of current live tracking; prefer `run-health-audit`
+- `analysis_only`: crawl/bootstrap/discovery only without committing to the full workflow yet; route to `tracking-discover` and stop after `analyze`
+
+Rules:
+
+- Do not ask the user to choose between `scenario` and `analyze`. `scenario` is run-intent orchestration metadata; `analyze` is only one execution step.
+- If intent is ambiguous, ask one short plain-language intake question using user-facing terms such as "new setup", "update existing tracking", "upkeep", "health audit", "analyze only", or "resume an existing run".
+- If the user gives a fresh URL and asks to set up tracking, default to `new_setup`.
+- If the user gives a fresh URL and only asks to inspect the site, analyze structure, or review current tracking signals, default to `analysis_only`.
+- If the user gives an artifact directory or workflow file, default to `resume_existing_run` instead of restarting from `analyze`.
+
 ## Routing Rules
 
 Route by user intent and current artifacts:

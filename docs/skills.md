@@ -20,7 +20,9 @@ This repository now has an umbrella skill plus a small phase-oriented skill fami
 ## Design Rules
 
 - The root skill remains the stable entry point for environments that only load one skill.
+- The root skill owns first-turn conversational intake for chat entry points and should classify the request in plain-language intent terms before choosing a scenario template or phase skill.
 - The root skill should stay an umbrella router and shared contract, not a long phase-by-phase runbook.
+- The root skill should not ask the user to choose between internal command names such as `scenario` and `analyze`.
 - Phase skills are intentionally thin. They should route to a bounded part of the workflow and stop when that phase is complete.
 - Shared mechanics live in the CLI, artifact contract, and root references. Phase skills should not fork those contracts.
 - Shopify keeps discovery and grouping shared, then takes ownership of the Shopify-specific schema, sync, install, and verification branch behavior.

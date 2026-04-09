@@ -197,6 +197,22 @@ Scenario guardrails:
 
 ### Use It As A Skill
 
+In an agent conversation, the first turn should be an intent-first intake, not a CLI choice.
+Do not ask the user whether they want `scenario` or `analyze`; ask which of these plain-language entry paths they need:
+
+- new setup from scratch
+- update existing tracking
+- upkeep or routine review
+- health audit only
+- analyze only
+- resume an existing artifact directory
+
+Internal mapping:
+
+- full workflow intents map to scenario templates such as `run-new-setup`, `run-tracking-update`, `run-upkeep`, and `run-health-audit`
+- `analyze only` maps to `tracking-discover` / `analyze` and stops after discovery
+- an existing artifact directory maps to `status` and resume-from-current-checkpoint behavior
+
 If you are using this in an agent environment, call it in natural language and provide the current workflow inputs:
 
 ```text

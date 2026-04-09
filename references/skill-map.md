@@ -20,7 +20,9 @@ If you are working in the source repository, the repo-facing companion lives at 
 ## Design Rules
 
 - The root skill remains the stable entry point when only one installed skill is available.
+- The root skill owns first-turn conversational intake for chat entry points and should classify requests by user intent before selecting scenario templates or phase skills.
 - The root skill should stay an umbrella router and shared contract, not a long phase-by-phase runbook.
+- The root skill should not ask the user to choose between internal command names such as `scenario` and `analyze`.
 - Phase skills should route to one bounded part of the workflow and stop when that phase is complete.
 - Shared mechanics live in the CLI, artifact contract, and root references.
 - Shopify keeps discovery and grouping shared, then takes ownership of the Shopify-specific schema, sync, install, and verification branch behavior.

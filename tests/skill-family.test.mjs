@@ -95,6 +95,8 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   const architectureRef = readText('references/architecture.md');
   const skillMapRef = readText('references/skill-map.md');
 
+  assert.match(rootSkill, /## Conversation Intake/, 'Root skill should define a conversation-first intake section for chat entry.');
+  assert.match(rootSkill, /Do not ask the user to choose between `scenario` and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
   assert.match(rootSkill, /## Routing Rules/, 'Root skill should keep routing rules explicit.');
   assert.match(rootSkill, /track(?:ing)?-shopify|`tracking-shopify`/, 'Root skill should mention the Shopify phase skill.');
   assert.match(rootSkill, /Do not continue past the phase boundary the user asked for\./, 'Root skill should keep a phase stop rule.');
@@ -103,6 +105,17 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   assert.match(rootSkill, /\[architecture\.md\]\(references\/architecture\.md\)/, 'Root skill should reference the install-shaped architecture path directly.');
   assert.match(architectureRef, /\[\.\.\/SKILL\.md\]\(\.\.\/SKILL\.md\)/, 'The runtime architecture reference should link to the root skill with bundle-safe relative paths.');
   assert.match(skillMapRef, /# Skill Map Reference/, 'The runtime skill-map reference should exist in source.');
+});
+
+test('root skill metadata and docs keep conversation-first routing explicit', () => {
+  const metadata = readText('agents/openai.yaml');
+  const readme = readText('README.md');
+  const docsSkillMap = readText('docs/skills.md');
+
+  assert.match(metadata, /new setup/i, 'Root skill metadata should mention new setup intake.');
+  assert.match(metadata, /analysis-only request/i, 'Root skill metadata should mention analysis-only intake.');
+  assert.match(readme, /Do not ask the user whether they want `scenario` or `analyze`;/, 'README should explain the conversation-first intake rule.');
+  assert.match(docsSkillMap, /first-turn conversational intake/i, 'docs\\/skills.md should describe conversation-first routing for the root skill.');
 });
 
 test('Shopify phase skill owns the Shopify-specific branch contract', () => {
