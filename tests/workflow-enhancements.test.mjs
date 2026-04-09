@@ -26,6 +26,16 @@ const {
   resolveOutputRootForArtifact,
   upsertRunContext,
 } = require(path.join(repoRoot, 'dist', 'workflow', 'run-index.js'));
+const {
+  RUN_MANIFEST_FILE,
+  VERSIONS_DIR,
+} = require(path.join(repoRoot, 'dist', 'workflow', 'versioning.js'));
+const {
+  getRequiredArtifactsForScenario,
+} = require(path.join(repoRoot, 'dist', 'workflow', 'scenario-requirements.js'));
+const {
+  SCENARIO_TRANSITIONS_FILE,
+} = require(path.join(repoRoot, 'dist', 'workflow', 'scenario-transition.js'));
 const { refreshWorkflowState } = require(path.join(repoRoot, 'dist', 'workflow', 'state.js'));
 const { getPageGroupsHash } = require(path.join(repoRoot, 'dist', 'crawler', 'page-analyzer.js'));
 
@@ -264,6 +274,413 @@ test('status --json and runs --json expose a run index for resumed workflows', t
   const runsPayload = JSON.parse(runsResult.stdout);
   assert.equal(runsPayload.outputRoot, outputRoot);
   assert.equal(runsPayload.runs[0].artifactDir, artifactDir);
+  assert.ok(runsPayload.scenarioSummary, 'runs --json should include scenario summary');
+  assert.equal(typeof runsPayload.scenarioSummary.counts.legacy, 'number');
+});
+
+test('scenario command sets scenario metadata and starts a new run with manifest', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  writeJson(path.join(artifactDir, 'site-analysis.json'), makeSiteAnalysis());
+
+  const result = runCli([
+    'scenario',
+    artifactDir,
+    '--set',
+    'tracking_update',
+    '--sub-scenario',
+    'new_requests',
+    '--input-scope',
+    'pricing page + campaign CTA',
+    '--new-run',
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+
+  const state = readJson(path.join(artifactDir, 'workflow-state.json'));
+  assert.equal(state.scenario, 'tracking_update');
+  assert.equal(state.subScenario, 'new_requests');
+  assert.equal(state.inputScope, 'pricing page + campaign CTA');
+  assert.notEqual(state.runId, 'legacy');
+
+  const context = readJson(path.join(artifactDir, RUN_CONTEXT_FILE));
+  assert.equal(context.activeRunId, state.runId);
+  assert.equal(context.scenario, 'tracking_update');
+  assert.equal(context.subScenario, 'new_requests');
+
+  const manifestFile = path.join(artifactDir, VERSIONS_DIR, state.runId, RUN_MANIFEST_FILE);
+  assert.ok(fs.existsSync(manifestFile), 'run manifest should exist for the active run');
+  const manifest = readJson(manifestFile);
+  assert.equal(manifest.runId, state.runId);
+  assert.equal(manifest.scenario, 'tracking_update');
+  assert.equal(manifest.subScenario, 'new_requests');
+});
+
+test('start-scenario starts an explicit scenario run and rotates runId', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  writeJson(path.join(artifactDir, 'site-analysis.json'), makeSiteAnalysis());
+  const first = runCli(['scenario', artifactDir, '--set', 'new_setup', '--new-run', '--json']);
+  assert.equal(first.status, 0, first.combinedOutput);
+  const firstState = JSON.parse(first.stdout);
+
+  const second = runCli([
+    'start-scenario',
+    'upkeep',
+    artifactDir,
+    '--sub-scenario',
+    'none',
+    '--input-scope',
+    'weekly health check',
+    '--json',
+  ]);
+  assert.equal(second.status, 0, second.combinedOutput);
+  const secondState = JSON.parse(second.stdout);
+
+  assert.equal(secondState.scenario, 'upkeep');
+  assert.equal(secondState.subScenario, 'none');
+  assert.equal(secondState.inputScope, 'weekly health check');
+  assert.notEqual(secondState.runId, firstState.runId);
+});
+
+test('scenario-transition writes transition audit and rotates run by default', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const start = runCli(['start-scenario', 'upkeep', artifactDir, '--json']);
+  assert.equal(start.status, 0, start.combinedOutput);
+  const started = JSON.parse(start.stdout);
+
+  const transition = runCli([
+    'scenario-transition',
+    artifactDir,
+    '--to',
+    'tracking_update',
+    '--to-sub-scenario',
+    'new_requests',
+    '--reason',
+    'weekly upkeep found drift',
+    '--json',
+  ]);
+  assert.equal(transition.status, 0, transition.combinedOutput);
+  const payload = JSON.parse(transition.stdout);
+
+  assert.equal(payload.from.scenario, 'upkeep');
+  assert.equal(payload.to.scenario, 'tracking_update');
+  assert.equal(payload.to.subScenario, 'new_requests');
+  assert.notEqual(payload.to.runId, started.runId);
+  assert.equal(payload.reason, 'weekly upkeep found drift');
+
+  const transitionFile = path.join(artifactDir, SCENARIO_TRANSITIONS_FILE);
+  assert.ok(fs.existsSync(transitionFile));
+  const lines = fs.readFileSync(transitionFile, 'utf8').trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0].fromScenario, 'upkeep');
+  assert.equal(lines[0].toScenario, 'tracking_update');
+});
+
+test('artifact writes are snapshotted under versions for the active run', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const analysisFile = path.join(artifactDir, 'site-analysis.json');
+  writeJson(analysisFile, makeSiteAnalysis());
+
+  const scenarioResult = runCli([
+    'scenario',
+    artifactDir,
+    '--set',
+    'upkeep',
+    '--new-run',
+  ]);
+  assert.equal(scenarioResult.status, 0, scenarioResult.combinedOutput);
+
+  const confirmResult = runCli(['confirm-page-groups', analysisFile, '--yes']);
+  assert.equal(confirmResult.status, 0, confirmResult.combinedOutput);
+
+  const state = readJson(path.join(artifactDir, 'workflow-state.json'));
+  const runSnapshotDir = path.join(artifactDir, VERSIONS_DIR, state.runId);
+
+  assert.ok(fs.existsSync(path.join(runSnapshotDir, 'site-analysis.json')));
+  assert.ok(fs.existsSync(path.join(runSnapshotDir, 'workflow-state.json')));
+
+  const manifest = readJson(path.join(runSnapshotDir, RUN_MANIFEST_FILE));
+  assert.ok(manifest.files.some(file => file.path === 'site-analysis.json'));
+  assert.ok(manifest.files.some(file => file.path === 'workflow-state.json'));
+});
+
+test('generate-update-report produces schema diff and business summary', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const baselineSchema = makeEventSchema([
+    makeEvent('signup_click'),
+  ]);
+  const currentSchema = makeEventSchema([
+    makeEvent('signup_click', { description: 'Updated signup CTA event' }),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]);
+
+  const baselineFile = path.join(artifactDir, 'baseline-event-schema.json');
+  const currentFile = path.join(artifactDir, 'event-schema.json');
+  writeJson(baselineFile, baselineSchema);
+  writeJson(currentFile, currentSchema);
+
+  const result = runCli([
+    'generate-update-report',
+    currentFile,
+    '--baseline-schema',
+    baselineFile,
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+
+  const diffFile = path.join(artifactDir, 'event-schema-diff-report.md');
+  const summaryFile = path.join(artifactDir, 'tracking-update-change-summary.md');
+  assert.ok(fs.existsSync(diffFile));
+  assert.ok(fs.existsSync(summaryFile));
+  assert.match(fs.readFileSync(diffFile, 'utf8'), /Added \| 1/);
+  assert.match(fs.readFileSync(summaryFile, 'utf8'), /Tracking Update Change Summary/);
+});
+
+test('generate-upkeep-report writes upkeep deliverables', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const baselineFile = path.join(artifactDir, 'baseline-event-schema.json');
+  const currentFile = path.join(artifactDir, 'event-schema.json');
+  writeJson(baselineFile, makeEventSchema([makeEvent('signup_click')]));
+  writeJson(currentFile, makeEventSchema([
+    makeEvent('signup_click', { description: 'Updated signup copy' }),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]));
+  writeJson(path.join(artifactDir, 'tracking-health.json'), makeTrackingHealthReport({
+    grade: 'warning',
+    score: 70,
+    blockers: [],
+  }));
+
+  const result = runCli([
+    'generate-upkeep-report',
+    currentFile,
+    '--baseline-schema',
+    baselineFile,
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-schema-comparison-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-preview-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-next-step-recommendation.md')));
+});
+
+test('generate-health-audit-report writes audit deliverables from live GTM baseline', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  const liveFile = path.join(artifactDir, 'live-gtm-analysis.json');
+  writeJson(schemaFile, makeEventSchema([
+    makeEvent('signup_click'),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]));
+  writeJson(liveFile, makeLiveGtmAnalysis());
+
+  const result = runCli([
+    'generate-health-audit-report',
+    schemaFile,
+    '--live-gtm-analysis',
+    liveFile,
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-schema-gap-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-preview-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-next-step-recommendation.md')));
+});
+
+test('tracking_health_audit scenario blocks generate-gtm unless force is used', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  writeJson(schemaFile, makeEventSchema());
+  const scenarioResult = runCli(['start-scenario', 'tracking_health_audit', artifactDir]);
+  assert.equal(scenarioResult.status, 0, scenarioResult.combinedOutput);
+
+  const blocked = runCli(['generate-gtm', schemaFile, '--measurement-id', 'G-TEST1234']);
+  assert.notEqual(blocked.status, 0);
+  assert.match(blocked.combinedOutput, /generate-gtm is blocked in scenario `tracking_health_audit`/);
+
+  const forced = runCli(['generate-gtm', schemaFile, '--measurement-id', 'G-TEST1234', '--force']);
+  assert.equal(forced.status, 0, forced.combinedOutput);
+});
+
+test('tracking_health_audit scenario blocks sync and publish before auth', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const configFile = path.join(artifactDir, 'gtm-config.json');
+  writeJson(configFile, {
+    exportFormatVersion: 2,
+    containerVersion: {
+      tag: [],
+      trigger: [],
+      variable: [],
+    },
+  });
+  const contextFile = path.join(artifactDir, 'gtm-context.json');
+  writeJson(contextFile, {
+    accountId: '123',
+    containerId: '456',
+    workspaceId: '789',
+  });
+
+  const scenarioResult = runCli(['start-scenario', 'tracking_health_audit', artifactDir]);
+  assert.equal(scenarioResult.status, 0, scenarioResult.combinedOutput);
+
+  const syncResult = runCli(['sync', configFile]);
+  assert.notEqual(syncResult.status, 0);
+  assert.match(syncResult.combinedOutput, /sync is blocked in scenario `tracking_health_audit`/);
+
+  const publishResult = runCli(['publish', '--context-file', contextFile]);
+  assert.notEqual(publishResult.status, 0);
+  assert.match(publishResult.combinedOutput, /publish is blocked in scenario `tracking_health_audit`/);
+});
+
+test('scenario-check reports missing required artifacts and scenario next step', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const start = runCli(['start-scenario', 'tracking_health_audit', artifactDir, '--json']);
+  assert.equal(start.status, 0, start.combinedOutput);
+
+  const check = runCli(['scenario-check', artifactDir, '--json']);
+  assert.equal(check.status, 0, check.combinedOutput);
+  const payload = JSON.parse(check.stdout);
+
+  assert.equal(payload.scenario, 'tracking_health_audit');
+  assert.equal(payload.ready, false);
+  assert.ok(payload.missing.includes('siteAnalysis'));
+  assert.match(payload.nextScenarioStep || '', /analyze/);
+});
+
+test('scenario-gated report commands reject mismatched scenarios', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  const baselineFile = path.join(artifactDir, 'baseline-event-schema.json');
+  const liveFile = path.join(artifactDir, 'live-gtm-analysis.json');
+  writeJson(schemaFile, makeEventSchema([makeEvent('signup_click')]));
+  writeJson(baselineFile, makeEventSchema([makeEvent('signup_click')]));
+  writeJson(liveFile, makeLiveGtmAnalysis());
+
+  const startUpkeep = runCli(['start-scenario', 'upkeep', artifactDir]);
+  assert.equal(startUpkeep.status, 0, startUpkeep.combinedOutput);
+
+  const healthAuditReport = runCli([
+    'generate-health-audit-report',
+    schemaFile,
+    '--live-gtm-analysis',
+    liveFile,
+  ]);
+  assert.notEqual(healthAuditReport.status, 0);
+  assert.match(healthAuditReport.combinedOutput, /not intended for scenario `upkeep`/);
+
+  const startAudit = runCli(['start-scenario', 'tracking_health_audit', artifactDir]);
+  assert.equal(startAudit.status, 0, startAudit.combinedOutput);
+
+  const upkeepReport = runCli([
+    'generate-upkeep-report',
+    schemaFile,
+    '--baseline-schema',
+    baselineFile,
+  ]);
+  assert.notEqual(upkeepReport.status, 0);
+  assert.match(upkeepReport.combinedOutput, /not intended for scenario `tracking_health_audit`/);
+});
+
+test('run-upkeep template starts scenario and writes upkeep deliverables', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  const baselineFile = path.join(artifactDir, 'baseline-event-schema.json');
+  writeJson(schemaFile, makeEventSchema([
+    makeEvent('signup_click', { description: 'Updated CTA copy' }),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]));
+  writeJson(baselineFile, makeEventSchema([makeEvent('signup_click')]));
+  writeJson(path.join(artifactDir, 'tracking-health.json'), makeTrackingHealthReport({
+    grade: 'good',
+    score: 90,
+    blockers: [],
+  }));
+
+  const result = runCli([
+    'run-upkeep',
+    artifactDir,
+    '--schema-file',
+    schemaFile,
+    '--baseline-schema',
+    baselineFile,
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /Upkeep template completed/);
+
+  const state = readJson(path.join(artifactDir, 'workflow-state.json'));
+  assert.equal(state.scenario, 'upkeep');
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-schema-comparison-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-preview-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'upkeep-next-step-recommendation.md')));
+});
+
+test('run-new-setup template starts scenario and shows next step guidance', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const result = runCli(['run-new-setup', artifactDir, '--input-scope', 'initial launch']);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /New Setup template started/);
+  assert.match(result.combinedOutput, /Scenario next step: .*analyze/);
+
+  const state = readJson(path.join(artifactDir, 'workflow-state.json'));
+  assert.equal(state.scenario, 'new_setup');
+  assert.equal(state.inputScope, 'initial launch');
+});
+
+test('run-health-audit template starts scenario and writes audit deliverables', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  const schemaFile = path.join(artifactDir, 'event-schema.json');
+  const liveFile = path.join(artifactDir, 'live-gtm-analysis.json');
+  writeJson(schemaFile, makeEventSchema([
+    makeEvent('signup_click'),
+    makeEvent('pricing_click', { priority: 'medium' }),
+  ]));
+  writeJson(liveFile, makeLiveGtmAnalysis());
+
+  const result = runCli([
+    'run-health-audit',
+    artifactDir,
+    '--schema-file',
+    schemaFile,
+    '--live-gtm-analysis',
+    liveFile,
+  ]);
+  assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /Tracking Health Audit template completed/);
+
+  const state = readJson(path.join(artifactDir, 'workflow-state.json'));
+  assert.equal(state.scenario, 'tracking_health_audit');
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-schema-gap-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-preview-report.md')));
+  assert.ok(fs.existsSync(path.join(artifactDir, 'tracking-health-next-step-recommendation.md')));
+});
+
+test('scenario requirements are loaded from configurable mapping', () => {
+  assert.deepEqual(getRequiredArtifactsForScenario('upkeep'), ['eventSchema']);
+  assert.deepEqual(getRequiredArtifactsForScenario('tracking_update'), ['eventSchema']);
+  assert.deepEqual(getRequiredArtifactsForScenario('tracking_health_audit'), ['siteAnalysis', 'liveGtmAnalysis', 'eventSchema']);
 });
 
 test('cli version comes from package.json instead of a hardcoded string', () => {

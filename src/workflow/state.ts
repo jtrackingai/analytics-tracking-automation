@@ -22,6 +22,18 @@ export const WORKFLOW_STATE_FILE = 'workflow-state.json';
 
 const PUBLIC_COMMAND = process.env.EVENT_TRACKING_PUBLIC_CMD?.trim() || './event-tracking';
 
+export type WorkflowScenario =
+  | 'new_setup'
+  | 'tracking_update'
+  | 'upkeep'
+  | 'tracking_health_audit'
+  | 'legacy';
+
+export type WorkflowSubScenario =
+  | 'none'
+  | 'new_requests'
+  | 'legacy_maintenance';
+
 export type WorkflowCheckpoint =
   | 'analyzed'
   | 'grouped'
@@ -93,6 +105,11 @@ export interface WorkflowState {
   version: 1;
   updatedAt: string;
   artifactDir: string;
+  runId: string;
+  runStartedAt: string;
+  scenario: WorkflowScenario;
+  subScenario: WorkflowSubScenario;
+  inputScope?: string;
   siteUrl?: string;
   platformType?: string;
   currentCheckpoint: WorkflowCheckpoint | 'not_started';
@@ -108,6 +125,11 @@ export interface WorkflowState {
 }
 
 export interface WorkflowStateUpdate {
+  runId?: string;
+  runStartedAt?: string;
+  scenario?: WorkflowScenario;
+  subScenario?: WorkflowSubScenario;
+  inputScope?: string;
   schemaReview?: Partial<SchemaReviewState>;
   verification?: Partial<VerificationState>;
   publish?: Partial<PublishState>;
@@ -591,6 +613,11 @@ export function buildWorkflowState(artifactDir: string, previousState?: Workflow
     version: 1,
     updatedAt: new Date().toISOString(),
     artifactDir,
+    runId: previousState?.runId || 'legacy',
+    runStartedAt: previousState?.runStartedAt || previousState?.updatedAt || new Date().toISOString(),
+    scenario: previousState?.scenario || 'legacy',
+    subScenario: previousState?.subScenario || 'none',
+    inputScope: previousState?.inputScope,
     siteUrl: analysis?.rootUrl,
     platformType: analysis?.platform.type,
     currentCheckpoint: getCurrentCheckpoint(completed),
@@ -624,11 +651,58 @@ export function refreshWorkflowState(artifactDir: string, update?: WorkflowState
   const mergedState: WorkflowState | null = previousState
     ? {
         ...previousState,
+        runId: update?.runId || previousState.runId,
+        runStartedAt: update?.runStartedAt || previousState.runStartedAt,
+        scenario: update?.scenario || previousState.scenario,
+        subScenario: update?.subScenario || previousState.subScenario,
+        inputScope: typeof update?.inputScope === 'string' ? update.inputScope : previousState.inputScope,
         schemaReview: mergeSchemaReview(previousState.schemaReview, update?.schemaReview),
         verification: mergeVerification(previousState.verification, update?.verification),
         publish: mergePublish(previousState.publish, update?.publish),
       }
-    : null;
+    : (update
+      ? {
+          version: 1,
+          updatedAt: new Date().toISOString(),
+          artifactDir,
+          runId: update.runId || 'legacy',
+          runStartedAt: update.runStartedAt || new Date().toISOString(),
+          scenario: update.scenario || 'legacy',
+          subScenario: update.subScenario || 'none',
+          inputScope: update.inputScope,
+          currentCheckpoint: 'not_started',
+          completedCheckpoints: [],
+          nextAction: '',
+          warnings: [],
+          pageGroupsReview: defaultPageGroupsReview(),
+          schemaReview: mergeSchemaReview(undefined, update.schemaReview),
+          verification: mergeVerification(undefined, update.verification),
+          publish: mergePublish(undefined, update.publish),
+          artifacts: {
+            siteAnalysis: false,
+            liveGtmAnalysis: false,
+            liveGtmReview: false,
+            schemaContext: false,
+            eventSchema: false,
+            eventSpec: false,
+            trackingPlanComparison: false,
+            schemaDecisionAudit: false,
+            schemaRestore: false,
+            gtmConfig: false,
+            gtmContext: false,
+            credentials: false,
+            previewReport: false,
+            previewResult: false,
+            trackingHealth: false,
+            trackingHealthReport: false,
+            trackingHealthHistory: false,
+            shopifySchemaTemplate: false,
+            shopifyBootstrapReview: false,
+            shopifyCustomPixel: false,
+            shopifyInstall: false,
+          },
+        }
+      : null);
 
   const nextState = buildWorkflowState(artifactDir, mergedState);
   fs.writeFileSync(getWorkflowFiles(artifactDir).workflowState, JSON.stringify(nextState, null, 2));

@@ -1,0 +1,7 @@
+{
+  "legacy": ["siteAnalysis"],
+  "new_setup": ["siteAnalysis", "eventSchema", "gtmConfig", "gtmContext", "trackingHealth"],
+  "tracking_update": ["eventSchema"],
+  "upkeep": ["eventSchema"],
+  "tracking_health_audit": ["siteAnalysis", "liveGtmAnalysis", "eventSchema"]
+}

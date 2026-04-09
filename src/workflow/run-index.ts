@@ -13,6 +13,11 @@ export interface RunContext {
   artifactDir: string;
   outputRoot: string;
   siteUrl?: string;
+  activeRunId?: string;
+  activeRunStartedAt?: string;
+  scenario?: WorkflowState['scenario'];
+  subScenario?: WorkflowState['subScenario'];
+  inputScope?: string;
 }
 
 export interface RunIndexEntry {
@@ -26,6 +31,9 @@ export interface RunIndexEntry {
   completedCheckpoints: WorkflowState['completedCheckpoints'];
   nextAction: string;
   nextCommand?: string;
+  runId: string;
+  scenario: WorkflowState['scenario'];
+  subScenario: WorkflowState['subScenario'];
 }
 
 function getRunIndexFile(outputRoot: string): string {
@@ -80,6 +88,11 @@ export function upsertRunContext(args: {
   artifactDir: string;
   outputRoot?: string;
   siteUrl?: string;
+  runId?: string;
+  runStartedAt?: string;
+  scenario?: WorkflowState['scenario'];
+  subScenario?: WorkflowState['subScenario'];
+  inputScope?: string;
 }): RunContext {
   const artifactDir = path.resolve(args.artifactDir);
   const existing = readRunContext(artifactDir);
@@ -97,6 +110,11 @@ export function upsertRunContext(args: {
     artifactDir,
     outputRoot,
     siteUrl: args.siteUrl || existing?.siteUrl,
+    activeRunId: args.runId || existing?.activeRunId,
+    activeRunStartedAt: args.runStartedAt || existing?.activeRunStartedAt,
+    scenario: args.scenario || existing?.scenario,
+    subScenario: args.subScenario || existing?.subScenario,
+    inputScope: typeof args.inputScope === 'string' ? args.inputScope : existing?.inputScope,
   };
 
   fs.mkdirSync(artifactDir, { recursive: true });
@@ -121,6 +139,11 @@ export function updateRunIndexFromState(state: WorkflowState): RunIndexEntry {
   const outputRoot = upsertRunContext({
     artifactDir,
     siteUrl: state.siteUrl,
+    runId: state.runId,
+    runStartedAt: state.runStartedAt,
+    scenario: state.scenario,
+    subScenario: state.subScenario,
+    inputScope: state.inputScope,
   }).outputRoot;
   const indexFile = getRunIndexFile(outputRoot);
   const entry: RunIndexEntry = {
@@ -134,6 +157,9 @@ export function updateRunIndexFromState(state: WorkflowState): RunIndexEntry {
     completedCheckpoints: state.completedCheckpoints,
     nextAction: state.nextAction,
     nextCommand: state.nextCommand,
+    runId: state.runId,
+    scenario: state.scenario,
+    subScenario: state.subScenario,
   };
 
   const priorEntries = readJsonl<RunIndexEntry>(indexFile)
