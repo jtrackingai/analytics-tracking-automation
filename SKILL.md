@@ -1,17 +1,17 @@
 ---
 name: event-tracking-skill
-description: Use when the request is end-to-end, spans multiple workflow phases, or the correct tracking-workflow entry point is still unclear.
+description: End-to-end GA4 + GTM tracking skill for site analysis, page grouping, schema design, GTM sync, preview QA, and publish readiness across generic sites and Shopify.
 ---
 
 # Event Tracking Skill
 
-Use this skill as the umbrella router for the GA4 + GTM tracking system.
+Use this skill as the end-to-end coordinator for GA4 + GTM tracking delivery.
 
 Use it when:
 
-- the request is end-to-end
-- the request spans multiple phases
-- the correct workflow entry point is still unclear
+- the user needs a full GA4 + GTM implementation flow, from analysis to go-live readiness
+- the request spans multiple workflow phases (discovery, schema, sync, verification, publish)
+- the correct entry point is still unclear and you need this skill to route to the right phase
 
 Do not assume the user wants the full workflow.
 
