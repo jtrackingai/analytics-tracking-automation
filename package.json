@@ -1,6 +1,6 @@
 {
   "name": "event-tracking-skill",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Automated web event tracking skill for GA4 + GTM",
   "main": "dist/cli.js",
   "bin": {

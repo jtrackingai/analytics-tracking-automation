@@ -23,7 +23,7 @@ What you expected to happen.
 
 - OS: [e.g. macOS 14, Ubuntu 22.04]
 - Node version: [e.g. 20.x]
-- Skill version: [e.g. 1.0.3]
+- Skill version: [e.g. 1.0.4]
 - AI tool: [e.g. Codex, Cursor]
 
 ## Logs / screenshots
