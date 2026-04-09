@@ -8,8 +8,23 @@ Install-facing skill bundles keep the matching runtime reference at [references/
 | --- | --- | --- |
 | Skill layer | Umbrella workflow routing and phase-specific skill frontends | [SKILL.md](SKILL.md), [docs/skills.md](docs/skills.md), `skills/*/SKILL.md` |
 | CLI layer | Deterministic commands for crawl, validation, GTM sync, preview, and publish | `./event-tracking ...` |
-| Artifact layer | Durable handoff files between steps | artifact directory under `<output-root>/<url-slug>` |
+| Artifact layer | Durable handoff files between steps | current files in artifact directory under `<output-root>/<url-slug>` plus per-run snapshots in `versions/<run-id>/` |
 | Reference layer | Domain rules for crawl, grouping, schema, preview, and Shopify behavior | `references/*.md` |
+
+## Scenario Orchestration
+
+On top of checkpoint-based execution, the CLI now has scenario orchestration primitives for delivery workflows:
+
+- explicit scenario run start: `start-scenario`
+- guided templates: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
+- scenario readiness check: `scenario-check`
+- auditable handoff: `scenario-transition`
+
+Scenario-specific guardrails:
+
+- `tracking_health_audit` is audit-only by default
+- deployment commands (`generate-gtm`, `sync`, `publish`) are blocked in that scenario unless explicitly overridden
+- scenario report commands are intent-gated to reduce accidental misuse
 
 ## Public vs Internal Interfaces
 
@@ -31,7 +46,7 @@ Documentation and skill examples should refer to the public interfaces, not `nod
 
 ## Artifact Lifecycle
 
-All workflow state lives inside a single artifact directory for one site run.
+All workflow state lives inside a single artifact directory for one site, with multiple versioned runs.
 
 | Checkpoint | Required Inputs | Produces | Gate Type |
 | --- | --- | --- | --- |
@@ -97,6 +112,7 @@ It records:
 
 - current checkpoint
 - completed checkpoints
+- scenario, sub-scenario, run ID, run start time, optional input scope
 - page-group review state
 - live GTM baseline readiness
 - schema review state
