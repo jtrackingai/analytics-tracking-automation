@@ -48,6 +48,7 @@ Produce and share:
 
 - `<artifact-dir>/event-schema.json`
 - optional `<artifact-dir>/event-spec.md`
+- optional `<artifact-dir>/tracking-plan-comparison.md` when `live-gtm-analysis.json` is present
 - `<artifact-dir>/schema-decisions.jsonl` after schema confirmation
 - `<artifact-dir>/schema-restore/` restore snapshots after schema confirmation
 - updated `<artifact-dir>/workflow-state.json`

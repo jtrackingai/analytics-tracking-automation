@@ -7,6 +7,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoVersion = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')).version;
 
 function runNode(args, options = {}) {
   const result = spawnSync('node', args, {
@@ -50,6 +51,20 @@ function installPortableRootSkill(targetDir) {
 
 function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function bumpPatch(version) {
+  const parts = version.trim().split('.');
+  if (parts.length !== 3) {
+    throw new Error(`Unsupported version format: ${version}`);
+  }
+
+  const [major, minor, patch] = parts.map(part => Number.parseInt(part, 10));
+  if ([major, minor, patch].some(Number.isNaN)) {
+    throw new Error(`Unsupported version format: ${version}`);
+  }
+
+  return `${major}.${minor}.${patch + 1}`;
 }
 
 function toFileUrl(filePath) {
@@ -153,10 +168,11 @@ test('update-check reports update_available when remote VERSION is newer', () =>
 test('self-update reinstalls selected bundles from a newer local tarball source', () => {
   const targetDir = makeTempDir('event-tracking-self-update-target-');
   installCopiedBundle(targetDir);
+  const remoteVersion = bumpPatch(repoVersion);
 
   const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-'), 'event-tracking-skill');
   copyRepoWithoutBuildOutputs(remoteRepoDir);
-  fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), '1.0.3\n');
+  fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
   fs.writeFileSync(
     path.join(remoteRepoDir, 'skills', 'tracking-schema', 'SKILL.md'),
     fs.readFileSync(path.join(remoteRepoDir, 'skills', 'tracking-schema', 'SKILL.md'), 'utf8')
@@ -180,17 +196,18 @@ test('self-update reinstalls selected bundles from a newer local tarball source'
   const updatedMetadata = readJson(path.join(bundleDir, '.event-tracking-install.json'));
   const updatedSkill = fs.readFileSync(path.join(bundleDir, 'SKILL.md'), 'utf8');
 
-  assert.equal(updatedMetadata.installedVersion, '1.0.3');
+  assert.equal(updatedMetadata.installedVersion, remoteVersion);
   assert.match(updatedSkill, /runtime-self-update-test/);
 });
 
 test('portable root self-update migrates into installer-managed copy layout', () => {
   const targetDir = makeTempDir('event-tracking-portable-root-update-target-');
   const bundleDir = installPortableRootSkill(targetDir);
+  const remoteVersion = bumpPatch(repoVersion);
 
   const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-root-repo-'), 'event-tracking-skill');
   copyRepoWithoutBuildOutputs(remoteRepoDir);
-  fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), '1.0.3\n');
+  fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
   fs.writeFileSync(
     path.join(remoteRepoDir, 'SKILL.md'),
     fs.readFileSync(path.join(remoteRepoDir, 'SKILL.md'), 'utf8')
@@ -213,7 +230,7 @@ test('portable root self-update migrates into installer-managed copy layout', ()
   const updatedMetadata = readJson(path.join(bundleDir, '.event-tracking-install.json'));
   const updatedSkill = fs.readFileSync(path.join(bundleDir, 'SKILL.md'), 'utf8');
 
-  assert.equal(updatedMetadata.installedVersion, '1.0.3');
+  assert.equal(updatedMetadata.installedVersion, remoteVersion);
   assert.equal(updatedMetadata.installMode, 'copy');
   assert.match(updatedSkill, /portable-root-self-update-test/);
   assert.match(updatedSkill, /## Installed Auto-Update/);

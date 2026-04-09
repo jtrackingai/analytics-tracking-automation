@@ -51,6 +51,7 @@ Produce and share:
 - `<artifact-dir>/preview-report.md`
 - `<artifact-dir>/preview-result.json`
 - `<artifact-dir>/tracking-health.json`
+- `<artifact-dir>/tracking-health-report.md`
 - `<artifact-dir>/tracking-health-history/`
 - updated `<artifact-dir>/workflow-state.json`
 

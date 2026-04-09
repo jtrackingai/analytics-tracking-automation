@@ -10,9 +10,25 @@ If you are working in the source repository, the repo-facing overview still live
 | --- | --- | --- |
 | Skill layer | Umbrella workflow routing and phase-specific skill entry points | [../SKILL.md](../SKILL.md), [skill-map.md](skill-map.md), separately installed phase skills |
 | CLI layer | Deterministic commands for crawl, validation, GTM sync, preview, and publish | `event-tracking ...` |
-| Artifact layer | Durable handoff files between steps | artifact directory under `<output-root>/<url-slug>` |
+| Artifact layer | Durable handoff files between steps | current files in artifact directory under `<output-root>/<url-slug>` plus per-run snapshots in `versions/<run-id>/` |
 | Run index layer | Recent run discovery for resume workflows plus per-artifact output-root recovery | `.event-tracking-runs.jsonl` under the output root and `.event-tracking-run.json` inside each artifact directory |
 | Reference layer | Domain rules for crawl, grouping, schema, preview, and Shopify behavior | `references/*.md` |
+
+## Scenario Orchestration
+
+The CLI now layers scenario orchestration on top of checkpoint execution:
+
+- start a labeled scenario run: `start-scenario`
+- relabel scenario metadata without executing a step: `scenario`
+- run scenario templates: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
+- validate scenario readiness: `scenario-check`
+- record scenario handoff with reason: `scenario-transition`
+
+Guardrails:
+
+- `tracking_health_audit` is audit-only by default
+- deployment commands are blocked in that scenario unless explicitly forced
+- scenario report commands are scenario-gated by intent
 
 ## Public Surface
 
@@ -26,7 +42,7 @@ When working in the source repository, the repo-local wrapper is `./event-tracki
 
 ## Artifact Lifecycle
 
-All workflow state lives inside one artifact directory for one site run.
+All workflow state lives inside one artifact directory for one site, with multiple versioned runs.
 
 | Checkpoint | Required Inputs | Produces | Gate Type |
 | --- | --- | --- | --- |
@@ -93,6 +109,7 @@ Use `event-tracking runs <output-root>` when the artifact directory is unknown b
 
 - current checkpoint
 - completed checkpoints
+- scenario metadata (`scenario`, `subScenario`, `runId`, `runStartedAt`, optional `inputScope`)
 - page-group review state
 - live GTM baseline readiness
 - schema review state

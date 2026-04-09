@@ -24,6 +24,14 @@ import { buildExistingTrackingBaseline, compareSchemaToLiveTracking } from './ge
 import { checkSelectors } from './generator/selector-check';
 import { runPreviewVerification, checkGTMOnPage } from './gtm/preview';
 import { generatePreviewReport } from './reporter/preview-report';
+import { generateTrackingPlanComparisonReport } from './reporter/tracking-plan-comparison';
+import { TRACKING_HEALTH_REPORT_FILE, writeTrackingHealthReportMarkdown } from './reporter/tracking-health-report';
+import {
+  SchemaDiffResult,
+  diffEventSchemas,
+  generateBusinessChangeSummaryMarkdown,
+  generateSchemaDiffReportMarkdown,
+} from './reporter/schema-diff';
 import { analyzeLiveGtmContainers, generateLiveGtmReviewMarkdown, LiveGtmAnalysis } from './gtm/live-parser';
 import { isShopifyPlatform } from './crawler/platform-detector';
 import { generateShopifyPixelArtifacts } from './shopify/pixel';
@@ -31,6 +39,8 @@ import { buildShopifyBootstrapArtifacts } from './shopify/schema-template';
 import {
   WORKFLOW_STATE_FILE,
   WorkflowState,
+  WorkflowScenario,
+  WorkflowSubScenario,
   getSchemaHash,
   readWorkflowState,
   refreshWorkflowState,
@@ -39,11 +49,20 @@ import {
 import {
   RUN_CONTEXT_FILE,
   RUN_INDEX_FILE,
+  readRunContext,
   readRunIndex,
   updateRunIndexFromState,
   upsertRunContext,
 } from './workflow/run-index';
 import { recordSchemaConfirmationAudit } from './workflow/schema-audit';
+import { getRequiredArtifactsForScenario } from './workflow/scenario-requirements';
+import { appendScenarioTransition, SCENARIO_TRANSITIONS_FILE } from './workflow/scenario-transition';
+import {
+  RUN_MANIFEST_FILE,
+  VERSIONS_DIR,
+  ensureActiveRunContext,
+  snapshotArtifactFile,
+} from './workflow/versioning';
 import {
   TRACKING_HEALTH_FILE,
   TRACKING_HEALTH_HISTORY_DIR,
@@ -68,6 +87,19 @@ interface AnalyzeOutputLocation {
   artifactDir: string;
   outputRoot: string;
 }
+
+const SCENARIOS: WorkflowScenario[] = [
+  'new_setup',
+  'tracking_update',
+  'upkeep',
+  'tracking_health_audit',
+  'legacy',
+];
+const SUB_SCENARIOS: WorkflowSubScenario[] = [
+  'none',
+  'new_requests',
+  'legacy_maintenance',
+];
 
 function slugifyPathSegment(value: string): string {
   return value
@@ -193,6 +225,24 @@ function normalizeTrackingId(id: string | undefined): string | undefined {
   return trimmed.toUpperCase();
 }
 
+function parseScenario(input: string | undefined, fallback: WorkflowScenario): WorkflowScenario {
+  const normalized = (input || '').trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (SCENARIOS.includes(normalized as WorkflowScenario)) {
+    return normalized as WorkflowScenario;
+  }
+  throw new Error(`Invalid scenario: ${input}. Expected one of: ${SCENARIOS.join(', ')}`);
+}
+
+function parseSubScenario(input: string | undefined, fallback: WorkflowSubScenario): WorkflowSubScenario {
+  const normalized = (input || '').trim().toLowerCase();
+  if (!normalized) return fallback;
+  if (SUB_SCENARIOS.includes(normalized as WorkflowSubScenario)) {
+    return normalized as WorkflowSubScenario;
+  }
+  throw new Error(`Invalid sub-scenario: ${input}. Expected one of: ${SUB_SCENARIOS.join(', ')}`);
+}
+
 function readJsonFile<T>(file: string): T {
   return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
 }
@@ -206,17 +256,377 @@ function writeJsonFile(file: string, value: unknown): void {
   fs.writeFileSync(file, JSON.stringify(value, null, 2));
 }
 
+function writeArtifactJsonFile(args: {
+  artifactDir: string;
+  file: string;
+  value: unknown;
+  stage?: string;
+}): void {
+  writeJsonFile(args.file, args.value);
+  snapshotArtifactFile({
+    artifactDir: args.artifactDir,
+    file: args.file,
+    stage: args.stage,
+  });
+}
+
+function writeArtifactTextFile(args: {
+  artifactDir: string;
+  file: string;
+  content: string;
+  encoding?: BufferEncoding;
+  stage?: string;
+}): void {
+  fs.writeFileSync(args.file, args.content, args.encoding || 'utf8');
+  snapshotArtifactFile({
+    artifactDir: args.artifactDir,
+    file: args.file,
+    stage: args.stage,
+  });
+}
+
+function findLatestSchemaSnapshot(artifactDir: string): string | null {
+  const restoreDir = path.join(path.resolve(artifactDir), 'schema-restore');
+  if (!fs.existsSync(restoreDir)) return null;
+  const candidates = fs.readdirSync(restoreDir)
+    .filter(name => name.endsWith('.json'))
+    .map(name => path.join(restoreDir, name))
+    .map(file => {
+      const stats = fs.statSync(file);
+      return { file, mtimeMs: stats.mtimeMs };
+    })
+    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+  return candidates[0]?.file || null;
+}
+
+function summarizeDiffForNextStep(diff: SchemaDiffResult): string {
+  if (diff.removed.length > 0) {
+    return 'Schema includes removals. Validate downstream reports and alerts before publish.';
+  }
+  if (diff.changed.length > 0) {
+    return 'Schema includes edited events. Re-run preview and confirm key conversions in QA.';
+  }
+  if (diff.added.length > 0) {
+    return 'Schema includes new events. Verify new journeys in preview and dashboard ingestion.';
+  }
+  return 'No schema differences detected. Keep current tracking or focus on health verification.';
+}
+
+function buildRunsScenarioSummary(entries: Array<{
+  scenario: WorkflowScenario;
+  subScenario: WorkflowSubScenario;
+  runId: string;
+  updatedAt: string;
+  artifactDir: string;
+  currentCheckpoint: string;
+}>): {
+  counts: Record<WorkflowScenario, number>;
+  latestByScenario: Partial<Record<WorkflowScenario, {
+    runId: string;
+    updatedAt: string;
+    artifactDir: string;
+    subScenario: WorkflowSubScenario;
+    checkpoint: string;
+  }>>;
+} {
+  const counts: Record<WorkflowScenario, number> = {
+    legacy: 0,
+    new_setup: 0,
+    tracking_update: 0,
+    upkeep: 0,
+    tracking_health_audit: 0,
+  };
+  const latestByScenario: Partial<Record<WorkflowScenario, {
+    runId: string;
+    updatedAt: string;
+    artifactDir: string;
+    subScenario: WorkflowSubScenario;
+    checkpoint: string;
+  }>> = {};
+
+  entries.forEach(entry => {
+    counts[entry.scenario] += 1;
+    if (!latestByScenario[entry.scenario]) {
+      latestByScenario[entry.scenario] = {
+        runId: entry.runId,
+        updatedAt: entry.updatedAt,
+        artifactDir: entry.artifactDir,
+        subScenario: entry.subScenario,
+        checkpoint: entry.currentCheckpoint,
+      };
+    }
+  });
+
+  return { counts, latestByScenario };
+}
+
+function getScenarioFromArtifact(artifactDir: string): WorkflowScenario {
+  const state = readWorkflowState(artifactDir);
+  if (state?.scenario) return state.scenario;
+  const context = readRunContext(artifactDir);
+  return context?.scenario || 'legacy';
+}
+
+function filePresent(artifactDir: string, name: string): boolean {
+  return fs.existsSync(path.join(path.resolve(artifactDir), name));
+}
+
+function suggestScenarioNextCommand(artifactDir: string, scenario: WorkflowScenario): string | null {
+  const resolvedDir = path.resolve(artifactDir);
+  const siteAnalysisFile = path.join(resolvedDir, 'site-analysis.json');
+  const eventSchemaFile = path.join(resolvedDir, 'event-schema.json');
+
+  if (scenario === 'new_setup') {
+    if (!filePresent(resolvedDir, 'site-analysis.json')) {
+      return formatPublicCommand(['analyze', '<url>', '--output-root', path.dirname(resolvedDir)]);
+    }
+    if (!filePresent(resolvedDir, 'event-schema.json')) {
+      return formatPublicCommand(['prepare-schema', siteAnalysisFile]);
+    }
+    if (!filePresent(resolvedDir, 'gtm-config.json')) {
+      return formatPublicCommand(['generate-gtm', eventSchemaFile, '--measurement-id', '<G-XXXXXXXXXX>']);
+    }
+    if (!filePresent(resolvedDir, 'gtm-context.json')) {
+      return formatPublicCommand(['sync', path.join(resolvedDir, 'gtm-config.json')]);
+    }
+    return formatPublicCommand(['preview', eventSchemaFile, '--context-file', path.join(resolvedDir, 'gtm-context.json')]);
+  }
+
+  if (scenario === 'tracking_update') {
+    if (!filePresent(resolvedDir, 'event-schema.json')) {
+      return formatPublicCommand(['status', resolvedDir]);
+    }
+    return formatPublicCommand(['generate-update-report', eventSchemaFile]);
+  }
+
+  if (scenario === 'upkeep') {
+    if (!filePresent(resolvedDir, 'event-schema.json')) {
+      return formatPublicCommand(['status', resolvedDir]);
+    }
+    return formatPublicCommand(['generate-upkeep-report', eventSchemaFile]);
+  }
+
+  if (scenario === 'tracking_health_audit') {
+    if (!filePresent(resolvedDir, 'site-analysis.json')) {
+      return formatPublicCommand(['analyze', '<url>', '--output-root', path.dirname(resolvedDir), '--scenario', 'tracking_health_audit']);
+    }
+    if (!filePresent(resolvedDir, 'live-gtm-analysis.json')) {
+      return formatPublicCommand(['analyze-live-gtm', siteAnalysisFile]);
+    }
+    if (!filePresent(resolvedDir, 'event-schema.json')) {
+      return formatPublicCommand(['prepare-schema', siteAnalysisFile]);
+    }
+    return formatPublicCommand(['generate-health-audit-report', eventSchemaFile]);
+  }
+
+  return null;
+}
+
+function generateTrackingUpdateArtifacts(args: {
+  artifactDir: string;
+  currentSchema: EventSchema;
+  baselineSchema: EventSchema;
+  diffFile: string;
+  summaryFile: string;
+}): SchemaDiffResult {
+  const diff = diffEventSchemas(args.currentSchema, args.baselineSchema);
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.diffFile,
+    content: generateSchemaDiffReportMarkdown({
+      current: args.currentSchema,
+      baseline: args.baselineSchema,
+      diff,
+      title: 'Event Schema Diff Report',
+    }),
+    stage: 'tracking_update_report',
+  });
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.summaryFile,
+    content: generateBusinessChangeSummaryMarkdown({
+      diff,
+      title: 'Tracking Update Change Summary',
+    }),
+    stage: 'tracking_update_report',
+  });
+  return diff;
+}
+
+function generateUpkeepArtifacts(args: {
+  artifactDir: string;
+  currentSchema: EventSchema;
+  baselineSchema: EventSchema;
+  healthFile: string;
+  schemaComparisonFile: string;
+  previewFile: string;
+  recommendationFile: string;
+}): SchemaDiffResult {
+  const diff = diffEventSchemas(args.currentSchema, args.baselineSchema);
+  const health = readTrackingHealthReport(args.healthFile);
+
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.schemaComparisonFile,
+    content: generateSchemaDiffReportMarkdown({
+      current: args.currentSchema,
+      baseline: args.baselineSchema,
+      diff,
+      title: 'Upkeep Schema Comparison Report',
+    }),
+    stage: 'upkeep_report',
+  });
+
+  const previewLines: string[] = [
+    '# Upkeep Preview Report',
+    '',
+    `**Health source:** ${args.healthFile}`,
+  ];
+  if (!health) {
+    previewLines.push('', '- tracking-health.json not found. Run preview before final upkeep decision.');
+  } else {
+    previewLines.push(
+      '',
+      `- Grade: ${health.grade}`,
+      `- Score: ${formatTrackingHealthScore(health.score)}`,
+      `- Blockers: ${health.blockers.length}`,
+      `- Unexpected events: ${health.unexpectedEventNames.length}`,
+      '',
+      '## Blockers',
+      '',
+      ...(health.blockers.length > 0 ? health.blockers.map(item => `- ${item}`) : ['- none']),
+    );
+  }
+  previewLines.push('', '_Generated by event-tracking-skill_');
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.previewFile,
+    content: previewLines.join('\n'),
+    stage: 'upkeep_report',
+  });
+
+  const recommendationLines: string[] = [
+    '# Upkeep Next Step Recommendation',
+    '',
+    `- Schema delta: +${diff.added.length} / ~${diff.changed.length} / -${diff.removed.length}`,
+    `- Recommendation: ${summarizeDiffForNextStep(diff)}`,
+  ];
+  if (!health) {
+    recommendationLines.push('- Preview status: missing, run preview to validate drift and failures.');
+  } else if (hasBlockingTrackingHealth(health)) {
+    recommendationLines.push('- Preview status: blocking issues found, open Tracking Update and fix blockers first.');
+  } else {
+    recommendationLines.push('- Preview status: non-blocking, proceed with controlled Tracking Update rollout.');
+  }
+  recommendationLines.push('', '_Generated by event-tracking-skill_');
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.recommendationFile,
+    content: recommendationLines.join('\n'),
+    stage: 'upkeep_report',
+  });
+
+  return diff;
+}
+
+function generateHealthAuditArtifacts(args: {
+  artifactDir: string;
+  schema: EventSchema;
+  liveAnalysis: LiveGtmAnalysis;
+  schemaGapFile: string;
+  previewFile: string;
+  recommendationFile: string;
+}): void {
+  const baseline = buildExistingTrackingBaseline(args.liveAnalysis);
+  const liveDelta = compareSchemaToLiveTracking(args.schema, args.liveAnalysis);
+  const gapReport = generateTrackingPlanComparisonReport({
+    schema: args.schema,
+    baseline,
+    liveDelta,
+  }).replace('# Tracking Plan Comparison Report', '# Tracking Health Schema Gap Report');
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.schemaGapFile,
+    content: gapReport,
+    stage: 'tracking_health_audit_report',
+  });
+
+  const previewLines: string[] = [
+    '# Tracking Health Preview Report',
+    '',
+    '- This scenario audits current live tracking against a candidate schema baseline.',
+    '- Automated GTM preview is optional here and not required for the initial health audit.',
+    '',
+    '## Current Live Signals',
+    '',
+    `- Live events found: ${baseline.totalLiveEvents}`,
+    `- Candidate schema events: ${args.schema.events.length}`,
+    `- Reused events: ${liveDelta.reusedEventCount}`,
+    `- Net-new events: ${liveDelta.newEventCount}`,
+    '',
+    '_Generated by event-tracking-skill_',
+  ];
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.previewFile,
+    content: previewLines.join('\n'),
+    stage: 'tracking_health_audit_report',
+  });
+
+  const recommendationLines: string[] = [
+    '# Tracking Health Audit Next Step Recommendation',
+    '',
+    baseline.totalLiveEvents === 0
+      ? '- Current live tracking coverage appears minimal or opaque. Recommended next step: start New Setup.'
+      : '- Current live tracking exists but has measurable gaps. Recommended next step: evaluate New Setup migration plan.',
+    '',
+    '- This audit is an assessment entry point and does not generate GTM sync configuration by itself.',
+    '- If you decide to rebuild with JTracking, continue with scenario `new_setup` and keep this audit as baseline evidence.',
+    '',
+    '_Generated by event-tracking-skill_',
+  ];
+  writeArtifactTextFile({
+    artifactDir: args.artifactDir,
+    file: args.recommendationFile,
+    content: recommendationLines.join('\n'),
+    stage: 'tracking_health_audit_report',
+  });
+}
+
 function refreshAndIndexWorkflowState(
   artifactDir: string,
   update?: Parameters<typeof refreshWorkflowState>[1],
-  runContext?: { outputRoot?: string; siteUrl?: string },
+  runContext?: {
+    outputRoot?: string;
+    siteUrl?: string;
+    scenario?: WorkflowScenario;
+    subScenario?: WorkflowSubScenario;
+    inputScope?: string;
+    forceNewRun?: boolean;
+  },
 ): WorkflowState {
-  upsertRunContext({
+  const activeRunContext = ensureActiveRunContext({
     artifactDir,
     outputRoot: runContext?.outputRoot,
     siteUrl: runContext?.siteUrl,
+    scenario: runContext?.scenario,
+    subScenario: runContext?.subScenario,
+    inputScope: runContext?.inputScope,
+    forceNewRun: runContext?.forceNewRun,
   });
-  const workflowState = refreshWorkflowState(artifactDir, update);
+  const workflowState = refreshWorkflowState(artifactDir, {
+    ...update,
+    runId: activeRunContext.activeRunId,
+    runStartedAt: activeRunContext.activeRunStartedAt,
+    scenario: activeRunContext.scenario || 'legacy',
+    subScenario: activeRunContext.subScenario || 'none',
+    inputScope: activeRunContext.inputScope,
+  });
+  snapshotArtifactFile({
+    artifactDir,
+    file: path.join(artifactDir, WORKFLOW_STATE_FILE),
+    stage: 'state_refresh',
+  });
   updateRunIndexFromState(workflowState);
   return workflowState;
 }
@@ -282,14 +692,24 @@ function writeShopifyPreviewInstructions(
     '- DOM click triggers on storefront pages are not the primary validation path in this Shopify flow unless you also install GTM into the Shopify theme.',
   ];
 
-  fs.writeFileSync(reportFile, lines.join('\n'));
-  fs.writeFileSync(jsonFile, JSON.stringify({
-    mode: 'manual_shopify_verification',
-    siteUrl: siteAnalysis.rootUrl,
-    platform: siteAnalysis.platform,
-    gtmContainerId: gtmPublicId || 'UNKNOWN',
-    generatedAt: new Date().toISOString(),
-  }, null, 2));
+  writeArtifactTextFile({
+    artifactDir: dir,
+    file: reportFile,
+    content: lines.join('\n'),
+    stage: 'preview_manual',
+  });
+  writeArtifactJsonFile({
+    artifactDir: dir,
+    file: jsonFile,
+    value: {
+      mode: 'manual_shopify_verification',
+      siteUrl: siteAnalysis.rootUrl,
+      platform: siteAnalysis.platform,
+      gtmContainerId: gtmPublicId || 'UNKNOWN',
+      generatedAt: new Date().toISOString(),
+    },
+    stage: 'preview_manual',
+  });
 
   return { reportFile, jsonFile };
 }
@@ -412,7 +832,27 @@ program
     `Partial mode: comma-separated list of specific URLs to analyze (max ${CRAWL_MAX_PARTIAL_URLS}). ` +
     'All URLs must belong to the same domain as <url>.',
   )
-  .action(async (url: string, opts: { urls?: string; outputRoot?: string; outputDir?: string; storefrontPassword?: string }) => {
+  .option(
+    '--scenario <scenario>',
+    `Run scenario: ${SCENARIOS.join(', ')} (default: new_setup)`,
+  )
+  .option(
+    '--sub-scenario <subScenario>',
+    `Run sub-scenario: ${SUB_SCENARIOS.join(', ')} (default: none)`,
+  )
+  .option(
+    '--input-scope <scope>',
+    'Optional free-form note describing this run input scope, such as specific pages, campaigns, or journeys',
+  )
+  .action(async (url: string, opts: {
+    urls?: string;
+    outputRoot?: string;
+    outputDir?: string;
+    storefrontPassword?: string;
+    scenario?: string;
+    subScenario?: string;
+    inputScope?: string;
+  }) => {
     const isPartial = !!opts.urls;
     const partialUrls = opts.urls
       ? opts.urls.split(',').map(u => u.trim()).filter(Boolean)
@@ -445,11 +885,22 @@ program
       process.exit(1);
     }
 
+    const scenario = parseScenario(opts.scenario, 'new_setup');
+    const subScenario = parseSubScenario(opts.subScenario, 'none');
     const outFile = path.join(dir, 'site-analysis.json');
-    writeJsonFile(outFile, siteAnalysis);
+    writeArtifactJsonFile({
+      artifactDir: dir,
+      file: outFile,
+      value: siteAnalysis,
+      stage: 'analyze',
+    });
     const workflowState = refreshAndIndexWorkflowState(dir, undefined, {
       outputRoot: outputLocation.outputRoot,
       siteUrl: siteAnalysis.rootUrl,
+      scenario,
+      subScenario,
+      inputScope: opts.inputScope?.trim() || undefined,
+      forceNewRun: true,
     });
 
     console.log(`\n✅ Analysis complete:`);
@@ -513,8 +964,14 @@ program
       confirmedAt: new Date().toISOString(),
       confirmedHash: currentHash,
     };
-    writeJsonFile(resolvedFile, analysis);
-    const workflowState = refreshAndIndexWorkflowState(resolveArtifactDirFromFile(resolvedFile));
+    const artifactDir = resolveArtifactDirFromFile(resolvedFile);
+    writeArtifactJsonFile({
+      artifactDir,
+      file: resolvedFile,
+      value: analysis,
+      stage: 'group_confirm',
+    });
+    const workflowState = refreshAndIndexWorkflowState(artifactDir);
 
     console.log(`\n✅ Page groups confirmed.`);
     console.log(`   Confirmation recorded in: ${resolvedFile}`);
@@ -572,8 +1029,18 @@ program
     const artifactDir = path.dirname(resolvedFile);
     const outFile = path.join(artifactDir, 'live-gtm-analysis.json');
     const reviewFile = path.join(artifactDir, 'live-gtm-review.md');
-    writeJsonFile(outFile, liveAnalysis);
-    fs.writeFileSync(reviewFile, generateLiveGtmReviewMarkdown(liveAnalysis), 'utf8');
+    writeArtifactJsonFile({
+      artifactDir,
+      file: outFile,
+      value: liveAnalysis,
+      stage: 'live_gtm_analyze',
+    });
+    writeArtifactTextFile({
+      artifactDir,
+      file: reviewFile,
+      content: generateLiveGtmReviewMarkdown(liveAnalysis),
+      stage: 'live_gtm_analyze',
+    });
     const workflowState = refreshAndIndexWorkflowState(artifactDir);
 
     console.log(`\n✅ Live GTM baseline analyzed:`);
@@ -727,6 +1194,9 @@ program
       schema,
       previousConfirmedHash,
     });
+    snapshotArtifactFile({ artifactDir, file: resolvedFile, stage: 'schema_confirm' });
+    snapshotArtifactFile({ artifactDir, file: schemaAudit.restoreFile, stage: 'schema_confirm' });
+    snapshotArtifactFile({ artifactDir, file: schemaAudit.auditFile, stage: 'schema_confirm' });
     const workflowState = refreshAndIndexWorkflowState(artifactDir, {
       schemaReview: {
         status: 'confirmed',
@@ -805,7 +1275,12 @@ program
 
     const context = buildSchemaContext(analysis, liveAnalysis);
     const outFile = path.join(artifactDir, 'schema-context.json');
-    writeJsonFile(outFile, context);
+    writeArtifactJsonFile({
+      artifactDir,
+      file: outFile,
+      value: context,
+      stage: 'prepare_schema',
+    });
 
     let shopifyTemplateFile: string | null = null;
     let shopifyBootstrappedSchemaFile: string | null = null;
@@ -817,13 +1292,28 @@ program
       const template = bootstrap.schema;
       shopifyReviewItems = bootstrap.reviewItems;
       shopifyTemplateFile = path.join(artifactDir, 'shopify-schema-template.json');
-      writeJsonFile(shopifyTemplateFile, template);
+      writeArtifactJsonFile({
+        artifactDir,
+        file: shopifyTemplateFile,
+        value: template,
+        stage: 'prepare_schema',
+      });
       shopifyReviewFile = path.join(artifactDir, 'shopify-bootstrap-review.md');
-      fs.writeFileSync(shopifyReviewFile, bootstrap.reviewMarkdown);
+      writeArtifactTextFile({
+        artifactDir,
+        file: shopifyReviewFile,
+        content: bootstrap.reviewMarkdown,
+        stage: 'prepare_schema',
+      });
 
       const eventSchemaFile = path.join(artifactDir, 'event-schema.json');
       if (!fs.existsSync(eventSchemaFile)) {
-        writeJsonFile(eventSchemaFile, template);
+        writeArtifactJsonFile({
+          artifactDir,
+          file: eventSchemaFile,
+          value: template,
+          stage: 'prepare_schema',
+        });
         shopifyBootstrappedSchemaFile = eventSchemaFile;
       } else {
         reusedExistingSchema = true;
@@ -872,6 +1362,15 @@ program
   .action(async (schemaFile: string, opts: { measurementId?: string; googleTagId?: string; outputDir?: string; force?: boolean }) => {
     const schema = readJsonFile<EventSchema>(schemaFile);
     const artifactDir = path.dirname(path.resolve(schemaFile));
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+
+    if (activeScenario === 'tracking_health_audit' && !opts.force) {
+      console.error('\n❌ generate-gtm is blocked in scenario `tracking_health_audit`.');
+      console.error('   This scenario is audit-only and should not generate GTM deployment config.');
+      console.error(`   Switch scenario first: ${formatPublicCommand(['start-scenario', 'new_setup', artifactDir])}`);
+      console.error('   Use --force only if you intentionally want to override this scenario gate.');
+      process.exit(1);
+    }
 
     // Validate schema before generating
     const issues = validateEventSchema(schema);
@@ -917,7 +1416,12 @@ program
       ? resolveOutputDir(opts.outputDir)
       : artifactDir;
     const outFile = path.join(dir, 'gtm-config.json');
-    fs.writeFileSync(outFile, JSON.stringify(config, null, 2));
+    writeArtifactJsonFile({
+      artifactDir: dir,
+      file: outFile,
+      value: config,
+      stage: 'generate_gtm',
+    });
     refreshAndIndexWorkflowState(dir);
 
     const { tag: tags, trigger: triggers, variable: variables } = config.containerVersion;
@@ -967,6 +1471,7 @@ program
   .option('--new-workspace', 'Create a new workspace instead of selecting existing')
   .option('--clean', 'Deprecated: cleanup of [JTracking] managed entities now happens automatically on every sync')
   .option('--dry-run', 'Show planned changes without executing them')
+  .option('--force-scenario', 'Override scenario gate checks (for advanced/manual transitions only)')
   .action(async (configFile: string, opts: {
     accountId?: string;
     containerId?: string;
@@ -974,11 +1479,21 @@ program
     newWorkspace?: boolean;
     clean?: boolean;
     dryRun?: boolean;
+    forceScenario?: boolean;
   }) => {
     const config = readJsonFile<GTMContainerExport>(configFile);
+    const artifactDir = resolveArtifactDirFromFile(configFile);
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+
+    if (activeScenario === 'tracking_health_audit' && !opts.forceScenario) {
+      console.error('\n❌ sync is blocked in scenario `tracking_health_audit`.');
+      console.error('   This scenario is audit-only and should not sync changes to GTM.');
+      console.error(`   Switch scenario first: ${formatPublicCommand(['start-scenario', 'new_setup', artifactDir])}`);
+      console.error('   Use --force-scenario only if you intentionally want to override this scenario gate.');
+      process.exit(1);
+    }
 
     console.log('\n🔐 Authenticating with Google...');
-    const artifactDir = resolveArtifactDirFromFile(configFile);
     const auth = await getAuthClient(artifactDir);
     const client = new GTMClient(auth);
 
@@ -1018,9 +1533,17 @@ program
       } else {
         const workspaces = await client.listWorkspaces(accountId, containerId);
         if (workspaces.length === 0) {
+          const answer = await prompt(
+            '\nNo GTM workspaces were found for this container. ' +
+            'Create a new workspace named "event-tracking-auto"? (yes/no): ',
+          );
+          if (answer.toLowerCase() !== 'yes') {
+            console.log('Sync cancelled. Re-run with --new-workspace if you want to create a workspace explicitly.');
+            return;
+          }
           const ws = await client.createWorkspace(accountId, containerId, 'event-tracking-auto');
           workspaceId = ws.workspaceId;
-          console.log(`\nCreated default workspace: ${ws.name}`);
+          console.log(`\n✅ Created workspace: ${ws.name} (${ws.workspaceId})`);
         } else {
           const ws = await selectFromList(workspaces, 'GTM Workspace', (w, i) => `${w.name} (ID: ${w.workspaceId})`);
           workspaceId = ws.workspaceId;
@@ -1060,10 +1583,18 @@ program
 
     // Save workspace info for subsequent commands
     const contextFile = path.join(path.dirname(configFile), 'gtm-context.json');
-    fs.writeFileSync(contextFile, JSON.stringify({
-      accountId, containerId, workspaceId, publicId,
-      syncedAt: new Date().toISOString(),
-    }, null, 2));
+    writeArtifactJsonFile({
+      artifactDir,
+      file: contextFile,
+      value: {
+        accountId,
+        containerId,
+        workspaceId,
+        publicId,
+        syncedAt: new Date().toISOString(),
+      },
+      stage: 'sync',
+    });
     console.log(`\n   GTM context saved: ${contextFile}`);
     refreshAndIndexWorkflowState(artifactDir);
 
@@ -1077,8 +1608,18 @@ program
         const artifacts = generateShopifyPixelArtifacts(publicId, siteAnalysis.rootUrl, schema);
         const pixelFile = path.join(artifactDir, 'shopify-custom-pixel.js');
         const installFile = path.join(artifactDir, 'shopify-install.md');
-        fs.writeFileSync(pixelFile, artifacts.pixelCode);
-        fs.writeFileSync(installFile, artifacts.installGuide);
+        writeArtifactTextFile({
+          artifactDir,
+          file: pixelFile,
+          content: artifacts.pixelCode,
+          stage: 'sync',
+        });
+        writeArtifactTextFile({
+          artifactDir,
+          file: installFile,
+          content: artifacts.installGuide,
+          stage: 'sync',
+        });
 
         console.log(`\n🛍️  Shopify site detected. Generated custom pixel artifacts:`);
         console.log(`   Pixel: ${pixelFile}`);
@@ -1148,6 +1689,7 @@ program
       const dir = path.dirname(schemaFile);
       const { reportFile, jsonFile } = writeShopifyPreviewInstructions(dir, siteAnalysis, gtmPublicId);
       const healthFile = path.join(dir, TRACKING_HEALTH_FILE);
+      const healthReportFile = path.join(dir, TRACKING_HEALTH_REPORT_FILE);
       const manualTrackingHealth = buildManualTrackingHealthReport({
         siteUrl: siteAnalysis.rootUrl,
         gtmContainerId: gtmPublicId,
@@ -1156,7 +1698,11 @@ program
         totalSchemaEvents: schema.events.length,
       });
       writeTrackingHealthReport(healthFile, manualTrackingHealth);
+      writeTrackingHealthReportMarkdown(healthReportFile, manualTrackingHealth);
       const historyFile = writeTrackingHealthHistory(dir, manualTrackingHealth);
+      snapshotArtifactFile({ artifactDir: dir, file: healthFile, stage: 'preview_manual' });
+      snapshotArtifactFile({ artifactDir: dir, file: healthReportFile, stage: 'preview_manual' });
+      snapshotArtifactFile({ artifactDir: dir, file: historyFile, stage: 'preview_manual' });
       refreshAndIndexWorkflowState(dir, {
         verification: {
           status: 'completed',
@@ -1168,6 +1714,7 @@ program
       console.log(`   Manual verification guide saved to: ${reportFile}`);
       console.log(`   Preview metadata saved to: ${jsonFile}`);
       console.log(`   Tracking health saved to: ${healthFile}`);
+      console.log(`   Tracking health report saved to: ${healthReportFile}`);
       console.log(`   Tracking health history saved to: ${historyFile}`);
       console.log(`\n   Next step: install the Shopify custom pixel, publish the GTM workspace, and validate in GA4 Realtime.`);
       return;
@@ -1232,15 +1779,26 @@ program
     const report = generatePreviewReport(previewResult, reportFile);
 
     const jsonFile = path.join(dir, 'preview-result.json');
-    fs.writeFileSync(jsonFile, JSON.stringify(previewResult, null, 2));
+    writeArtifactJsonFile({
+      artifactDir: dir,
+      file: jsonFile,
+      value: previewResult,
+      stage: 'preview',
+    });
+    snapshotArtifactFile({ artifactDir: dir, file: reportFile, stage: 'preview' });
     const healthFile = path.join(dir, TRACKING_HEALTH_FILE);
+    const healthReportFile = path.join(dir, TRACKING_HEALTH_REPORT_FILE);
     const baselineFile = opts.baseline?.trim()
       ? path.resolve(opts.baseline)
       : (fs.existsSync(healthFile) ? healthFile : undefined);
     const baselineHealth = baselineFile ? readTrackingHealthReport(baselineFile) : null;
     const trackingHealth = buildTrackingHealthReport(previewResult, baselineHealth, baselineFile);
     writeTrackingHealthReport(healthFile, trackingHealth);
+    writeTrackingHealthReportMarkdown(healthReportFile, trackingHealth);
     const historyFile = writeTrackingHealthHistory(dir, trackingHealth);
+    snapshotArtifactFile({ artifactDir: dir, file: healthFile, stage: 'preview' });
+    snapshotArtifactFile({ artifactDir: dir, file: healthReportFile, stage: 'preview' });
+    snapshotArtifactFile({ artifactDir: dir, file: historyFile, stage: 'preview' });
     refreshAndIndexWorkflowState(dir, {
       verification: {
         status: 'completed',
@@ -1258,6 +1816,7 @@ program
     console.log(`\n✅ Report saved to: ${reportFile}`);
     console.log(`   Raw data saved to: ${jsonFile}`);
     console.log(`   Tracking health saved to: ${healthFile} (score ${formatTrackingHealthScore(trackingHealth.score)}, ${trackingHealth.grade})`);
+    console.log(`   Tracking health report saved to: ${healthReportFile}`);
     console.log(`   Tracking health history saved to: ${historyFile}`);
     if (trackingHealth.baseline) {
       if (typeof trackingHealth.baseline.scoreDelta === 'number') {
@@ -1330,6 +1889,14 @@ program
     if (!artifactDir) {
       throw new Error('Missing artifact directory. Provide --context-file or --artifact-dir so URL-scoped OAuth credentials can be loaded.');
     }
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+    if (activeScenario === 'tracking_health_audit' && !opts.force) {
+      console.error('\n❌ publish is blocked in scenario `tracking_health_audit`.');
+      console.error('   This scenario is audit-only and should not publish GTM changes.');
+      console.error(`   Switch scenario first: ${formatPublicCommand(['start-scenario', 'new_setup', artifactDir])}`);
+      console.error('   Use --force only if you intentionally want to override this scenario gate.');
+      process.exit(1);
+    }
 
     const publishReadiness = evaluatePublishReadiness(artifactDir);
     if (publishReadiness.blocking && !opts.force) {
@@ -1385,6 +1952,207 @@ program
   });
 
 program
+  .command('scenario <artifact-path>')
+  .description('Inspect or update scenario metadata only for the active run in an artifact directory')
+  .option('--set <scenario>', `Scenario name: ${SCENARIOS.join(', ')}`)
+  .option('--sub-scenario <subScenario>', `Sub-scenario name: ${SUB_SCENARIOS.join(', ')}`)
+  .option('--input-scope <scope>', 'Optional free-form input scope note for the active run')
+  .option('--new-run', 'Start a new run ID while applying scenario metadata')
+  .option('--json', 'Print machine-readable workflow state JSON after update')
+  .action((artifactPath: string, opts: {
+    set?: string;
+    subScenario?: string;
+    inputScope?: string;
+    newRun?: boolean;
+    json?: boolean;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const existingContext = readRunContext(artifactDir);
+    const scenario = parseScenario(opts.set, existingContext?.scenario || 'legacy');
+    const subScenario = parseSubScenario(opts.subScenario, existingContext?.subScenario || 'none');
+    const inputScope = typeof opts.inputScope === 'string'
+      ? opts.inputScope.trim() || undefined
+      : existingContext?.inputScope;
+
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario,
+      subScenario,
+      inputScope,
+      forceNewRun: !!opts.newRun,
+    });
+
+    const workflowState = refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario,
+      subScenario,
+      inputScope,
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(workflowState, null, 2));
+      return;
+    }
+
+    console.log(`\n✅ Scenario metadata updated`);
+    console.log(`   Artifact directory: ${artifactDir}`);
+    console.log(`   Scenario: ${workflowState.scenario}`);
+    console.log(`   Sub-scenario: ${workflowState.subScenario}`);
+    console.log(`   Run ID: ${workflowState.runId}`);
+    console.log(`   Run started: ${workflowState.runStartedAt}`);
+    if (workflowState.inputScope) {
+      console.log(`   Input scope: ${workflowState.inputScope}`);
+    }
+    if (workflowState.nextCommand) {
+      console.log(`   Next step: ${workflowState.nextCommand}`);
+    }
+  });
+
+program
+  .command('start-scenario <scenario> <artifact-path>')
+  .description('Start a new scenario run (explicit entry point for New Setup / Tracking Update / Upkeep / Tracking Health Audit)')
+  .option('--sub-scenario <subScenario>', `Sub-scenario name: ${SUB_SCENARIOS.join(', ')}`)
+  .option('--input-scope <scope>', 'Optional free-form input scope note for this scenario run')
+  .option('--json', 'Print machine-readable workflow state JSON after starting scenario')
+  .action((scenarioInput: string, artifactPath: string, opts: {
+    subScenario?: string;
+    inputScope?: string;
+    json?: boolean;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const scenario = parseScenario(scenarioInput, 'legacy');
+    const subScenario = parseSubScenario(opts.subScenario, 'none');
+    const inputScope = opts.inputScope?.trim() || undefined;
+
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario,
+      subScenario,
+      inputScope,
+      forceNewRun: true,
+    });
+
+    const workflowState = refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario,
+      subScenario,
+      inputScope,
+    });
+
+    if (opts.json) {
+      console.log(JSON.stringify(workflowState, null, 2));
+      return;
+    }
+
+    console.log(`\n✅ Scenario run started`);
+    console.log(`   Scenario: ${workflowState.scenario}`);
+    console.log(`   Sub-scenario: ${workflowState.subScenario}`);
+    console.log(`   Run ID: ${workflowState.runId}`);
+    console.log(`   Artifact directory: ${workflowState.artifactDir}`);
+    if (workflowState.inputScope) {
+      console.log(`   Input scope: ${workflowState.inputScope}`);
+    }
+    const scenarioNext = suggestScenarioNextCommand(workflowState.artifactDir, workflowState.scenario);
+    if (scenarioNext) {
+      console.log(`   Scenario next step: ${scenarioNext}`);
+    } else if (workflowState.nextCommand) {
+      console.log(`   Recommended next step: ${workflowState.nextCommand}`);
+    }
+  });
+
+program
+  .command('scenario-transition <artifact-path>')
+  .description('Record a scenario transition with optional reason and start a new run by default')
+  .requiredOption('--to <scenario>', `Target scenario: ${SCENARIOS.join(', ')}`)
+  .option('--to-sub-scenario <subScenario>', `Target sub-scenario: ${SUB_SCENARIOS.join(', ')}`)
+  .option('--reason <text>', 'Optional transition reason for audit trail')
+  .option('--input-scope <scope>', 'Optional input scope to store on the target scenario run')
+  .option('--no-new-run', 'Keep the current run ID instead of creating a new run for the target scenario')
+  .option('--json', 'Print machine-readable transition payload')
+  .action((artifactPath: string, opts: {
+    to: string;
+    toSubScenario?: string;
+    reason?: string;
+    inputScope?: string;
+    newRun?: boolean;
+    json?: boolean;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const previousState = readWorkflowState(artifactDir);
+    const previousContext = readRunContext(artifactDir);
+    const fromScenario = previousState?.scenario || previousContext?.scenario || 'legacy';
+    const fromSubScenario = previousState?.subScenario || previousContext?.subScenario || 'none';
+    const fromRunId = previousState?.runId || previousContext?.activeRunId || 'legacy';
+    const toScenario = parseScenario(opts.to, fromScenario);
+    const toSubScenario = parseSubScenario(opts.toSubScenario, fromSubScenario);
+    const inputScope = opts.inputScope?.trim() || previousState?.inputScope || previousContext?.inputScope;
+    const createNewRun = opts.newRun !== false;
+
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario: toScenario,
+      subScenario: toSubScenario,
+      inputScope,
+      forceNewRun: createNewRun,
+    });
+    const workflowState = refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario: toScenario,
+      subScenario: toSubScenario,
+      inputScope,
+    });
+
+    const transition = appendScenarioTransition({
+      artifactDir,
+      fromScenario,
+      fromSubScenario,
+      fromRunId,
+      toScenario: workflowState.scenario,
+      toSubScenario: workflowState.subScenario,
+      toRunId: workflowState.runId,
+      reason: opts.reason?.trim() || undefined,
+    });
+    snapshotArtifactFile({
+      artifactDir,
+      file: transition.file,
+      stage: 'scenario_transition',
+    });
+
+    const payload = {
+      artifactDir: path.resolve(artifactDir),
+      from: {
+        scenario: fromScenario,
+        subScenario: fromSubScenario,
+        runId: fromRunId,
+      },
+      to: {
+        scenario: workflowState.scenario,
+        subScenario: workflowState.subScenario,
+        runId: workflowState.runId,
+      },
+      transitionFile: transition.file,
+      reason: transition.entry.reason,
+      newRunCreated: createNewRun,
+    };
+
+    if (opts.json) {
+      console.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+
+    console.log(`\n✅ Scenario transition recorded`);
+    console.log(`   From: ${fromScenario}/${fromSubScenario} (${fromRunId})`);
+    console.log(`   To: ${workflowState.scenario}/${workflowState.subScenario} (${workflowState.runId})`);
+    if (transition.entry.reason) {
+      console.log(`   Reason: ${transition.entry.reason}`);
+    }
+    console.log(`   Transition log: ${transition.file}`);
+  });
+
+program
   .command('status <artifact-path>')
   .description('Inspect workflow state for an artifact directory or one of its files')
   .option('--json', 'Print machine-readable workflow state JSON')
@@ -1406,6 +2174,13 @@ program
     if (workflowState.platformType) {
       console.log(`   Platform: ${workflowState.platformType}`);
     }
+    console.log(`   Scenario: ${workflowState.scenario}`);
+    console.log(`   Sub-scenario: ${workflowState.subScenario}`);
+    console.log(`   Run ID: ${workflowState.runId}`);
+    console.log(`   Run started: ${workflowState.runStartedAt}`);
+    if (workflowState.inputScope) {
+      console.log(`   Input scope: ${workflowState.inputScope}`);
+    }
 
     console.log(`\n✅ Completed checkpoints:`);
     if (workflowState.completedCheckpoints.length === 0) {
@@ -1422,13 +2197,18 @@ program
       ['schema-context.json', workflowState.artifacts.schemaContext],
       ['event-schema.json', workflowState.artifacts.eventSchema],
       ['event-spec.md', workflowState.artifacts.eventSpec],
+      ['tracking-plan-comparison.md', workflowState.artifacts.trackingPlanComparison],
       ['schema-decisions.jsonl', workflowState.artifacts.schemaDecisionAudit],
       ['schema-restore/', workflowState.artifacts.schemaRestore],
       ['gtm-config.json', workflowState.artifacts.gtmConfig],
       ['gtm-context.json', workflowState.artifacts.gtmContext],
       ['preview-report.md', workflowState.artifacts.previewReport],
       [TRACKING_HEALTH_FILE, workflowState.artifacts.trackingHealth],
+      [TRACKING_HEALTH_REPORT_FILE, workflowState.artifacts.trackingHealthReport],
       [TRACKING_HEALTH_HISTORY_DIR, workflowState.artifacts.trackingHealthHistory],
+      [VERSIONS_DIR, fs.existsSync(path.join(workflowState.artifactDir, VERSIONS_DIR))],
+      [path.join(VERSIONS_DIR, workflowState.runId, RUN_MANIFEST_FILE), fs.existsSync(path.join(workflowState.artifactDir, VERSIONS_DIR, workflowState.runId, RUN_MANIFEST_FILE))],
+      [SCENARIO_TRANSITIONS_FILE, fs.existsSync(path.join(workflowState.artifactDir, SCENARIO_TRANSITIONS_FILE))],
       [RUN_CONTEXT_FILE, fs.existsSync(path.join(workflowState.artifactDir, RUN_CONTEXT_FILE))],
       [WORKFLOW_STATE_FILE, true],
     ];
@@ -1467,6 +2247,56 @@ program
   });
 
 program
+  .command('scenario-check <artifact-path>')
+  .description('Validate required artifacts for the active scenario and show scenario-specific next steps')
+  .option('--json', 'Print machine-readable scenario check result JSON')
+  .action((artifactPath: string, opts: { json?: boolean }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const scenario = getScenarioFromArtifact(artifactDir);
+    const checks = {
+      siteAnalysis: filePresent(artifactDir, 'site-analysis.json'),
+      liveGtmAnalysis: filePresent(artifactDir, 'live-gtm-analysis.json'),
+      eventSchema: filePresent(artifactDir, 'event-schema.json'),
+      gtmConfig: filePresent(artifactDir, 'gtm-config.json'),
+      gtmContext: filePresent(artifactDir, 'gtm-context.json'),
+      trackingHealth: filePresent(artifactDir, TRACKING_HEALTH_FILE),
+    };
+
+    const required = getRequiredArtifactsForScenario(scenario) as Array<keyof typeof checks>;
+    const missing = required.filter(key => !checks[key]);
+    const next = suggestScenarioNextCommand(artifactDir, scenario);
+    const payload = {
+      artifactDir: path.resolve(artifactDir),
+      scenario,
+      checks,
+      required,
+      missing,
+      ready: missing.length === 0,
+      nextScenarioStep: next,
+    };
+
+    if (opts.json) {
+      console.log(JSON.stringify(payload, null, 2));
+      return;
+    }
+
+    console.log(`\n🧭 Scenario check`);
+    console.log(`   Artifact directory: ${payload.artifactDir}`);
+    console.log(`   Scenario: ${scenario}`);
+    console.log(`\n✅ Required artifacts:`);
+    required.forEach(item => {
+      console.log(`   - ${item}: ${checks[item] ? 'present' : 'missing'}`);
+    });
+    console.log(`\n${payload.ready ? '✅' : '⚠️'} Readiness: ${payload.ready ? 'ready' : 'missing required artifacts'}`);
+    if (payload.missing.length > 0) {
+      console.log(`   Missing: ${payload.missing.join(', ')}`);
+    }
+    if (next) {
+      console.log(`\n➡️  Scenario next step: ${next}`);
+    }
+  });
+
+program
   .command('runs [output-root]')
   .description('List known event-tracking artifact directories from an output root')
   .option('--json', 'Print machine-readable run index JSON')
@@ -1477,9 +2307,18 @@ program
     const entries = readRunIndex(resolvedRoot).slice(0, limit);
 
     if (opts.json) {
+      const scenarioSummary = buildRunsScenarioSummary(entries.map(entry => ({
+        scenario: entry.scenario,
+        subScenario: entry.subScenario,
+        runId: entry.runId,
+        updatedAt: entry.updatedAt,
+        artifactDir: entry.artifactDir,
+        currentCheckpoint: entry.currentCheckpoint,
+      })));
       console.log(JSON.stringify({
         outputRoot: resolvedRoot,
         indexFile: path.join(resolvedRoot, RUN_INDEX_FILE),
+        scenarioSummary,
         runs: entries,
       }, null, 2));
       return;
@@ -1496,6 +2335,8 @@ program
       console.log(`\n   [${index + 1}] ${entry.siteUrl || '(site unknown)'}`);
       console.log(`       Artifact directory: ${entry.artifactDir}`);
       console.log(`       Checkpoint: ${entry.currentCheckpoint}`);
+      console.log(`       Scenario: ${entry.scenario}/${entry.subScenario}`);
+      console.log(`       Run ID: ${entry.runId}`);
       if (entry.platformType) {
         console.log(`       Platform: ${entry.platformType}`);
       }
@@ -1534,6 +2375,7 @@ program
     const liveAnalysis = tryReadJsonFile<LiveGtmAnalysis>(path.join(artifactDir, 'live-gtm-analysis.json'));
     const baseline = liveAnalysis ? buildExistingTrackingBaseline(liveAnalysis) : null;
     const liveDelta = liveAnalysis ? compareSchemaToLiveTracking(schema, liveAnalysis) : null;
+    const comparisonOutFile = path.join(artifactDir, 'tracking-plan-comparison.md');
 
     const lines: string[] = [
       `# GA4 Event Tracking Specification`,
@@ -1698,7 +2540,29 @@ program
 
     const spec = lines.join('\n');
     const outFile = path.join(artifactDir, 'event-spec.md');
-    fs.writeFileSync(outFile, spec, 'utf-8');
+    writeArtifactTextFile({
+      artifactDir,
+      file: outFile,
+      content: spec,
+      encoding: 'utf-8',
+      stage: 'generate_spec',
+    });
+
+    if (baseline && liveDelta) {
+      const comparisonReport = generateTrackingPlanComparisonReport({
+        schema,
+        baseline,
+        liveDelta,
+      });
+      writeArtifactTextFile({
+        artifactDir,
+        file: comparisonOutFile,
+        content: comparisonReport,
+        encoding: 'utf-8',
+        stage: 'generate_spec',
+      });
+    }
+
     refreshAndIndexWorkflowState(artifactDir);
 
     console.log(`\n✅ Event spec generated: ${outFile}`);
@@ -1708,11 +2572,422 @@ program
       if (liveDelta.problemsSolved.length > 0) {
         console.log(`   Solves: ${liveDelta.problemsSolved[0]}`);
       }
+      if (baseline) {
+        console.log(`   Comparison report: ${comparisonOutFile}`);
+      }
     }
     if (quota.customDimensions > 0) {
       console.log(`   ${quota.customDimensions} custom dimensions listed`);
     }
     console.log(`   Workflow state: ${path.join(artifactDir, WORKFLOW_STATE_FILE)}`);
+  });
+
+program
+  .command('generate-update-report <schema-file>')
+  .description('Generate Tracking Update deliverables: schema diff report and business change summary')
+  .option('--baseline-schema <file>', 'Baseline event-schema.json to compare against')
+  .option('--diff-file <file>', 'Output markdown file for schema diff report')
+  .option('--summary-file <file>', 'Output markdown file for business-friendly change summary')
+  .action((schemaFile: string, opts: { baselineSchema?: string; diffFile?: string; summaryFile?: string }) => {
+    const resolvedSchemaFile = path.resolve(schemaFile);
+    const artifactDir = path.dirname(resolvedSchemaFile);
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+    if (!['tracking_update', 'upkeep', 'legacy'].includes(activeScenario)) {
+      console.error(`\n❌ generate-update-report is not intended for scenario \`${activeScenario}\`.`);
+      console.error(`   Start Tracking Update first: ${formatPublicCommand(['start-scenario', 'tracking_update', artifactDir])}`);
+      process.exit(1);
+    }
+    const currentSchema = readJsonFile<EventSchema>(resolvedSchemaFile);
+    const baselineFile = opts.baselineSchema?.trim()
+      ? path.resolve(opts.baselineSchema)
+      : findLatestSchemaSnapshot(artifactDir);
+
+    if (!baselineFile || !fs.existsSync(baselineFile)) {
+      console.error('\n❌ Baseline schema is required for Tracking Update diff generation.');
+      console.error('   Provide --baseline-schema <file>, or confirm a previous schema so schema-restore snapshots exist.');
+      process.exit(1);
+    }
+
+    const baselineSchema = readJsonFile<EventSchema>(baselineFile);
+    const diffFile = opts.diffFile?.trim()
+      ? path.resolve(opts.diffFile)
+      : path.join(artifactDir, 'event-schema-diff-report.md');
+    const summaryFile = opts.summaryFile?.trim()
+      ? path.resolve(opts.summaryFile)
+      : path.join(artifactDir, 'tracking-update-change-summary.md');
+
+    const diff = generateTrackingUpdateArtifacts({
+      artifactDir,
+      currentSchema,
+      baselineSchema,
+      diffFile,
+      summaryFile,
+    });
+
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      siteUrl: currentSchema.siteUrl,
+      scenario: 'tracking_update',
+    });
+
+    console.log(`\n✅ Tracking Update reports generated.`);
+    console.log(`   Baseline schema: ${baselineFile}`);
+    console.log(`   Diff report: ${diffFile}`);
+    console.log(`   Business summary: ${summaryFile}`);
+    console.log(`   Next guidance: ${summarizeDiffForNextStep(diff)}`);
+  });
+
+program
+  .command('generate-upkeep-report <schema-file>')
+  .description('Generate Upkeep deliverables: schema comparison, upkeep preview summary, and next-step recommendation')
+  .option('--baseline-schema <file>', 'Baseline event-schema.json to compare against')
+  .option('--health-file <file>', 'Tracking health file used for upkeep preview summary')
+  .action((schemaFile: string, opts: { baselineSchema?: string; healthFile?: string }) => {
+    const resolvedSchemaFile = path.resolve(schemaFile);
+    const artifactDir = path.dirname(resolvedSchemaFile);
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+    if (!['upkeep', 'legacy'].includes(activeScenario)) {
+      console.error(`\n❌ generate-upkeep-report is not intended for scenario \`${activeScenario}\`.`);
+      console.error(`   Start Upkeep first: ${formatPublicCommand(['start-scenario', 'upkeep', artifactDir])}`);
+      process.exit(1);
+    }
+    const currentSchema = readJsonFile<EventSchema>(resolvedSchemaFile);
+    const baselineFile = opts.baselineSchema?.trim()
+      ? path.resolve(opts.baselineSchema)
+      : findLatestSchemaSnapshot(artifactDir);
+
+    if (!baselineFile || !fs.existsSync(baselineFile)) {
+      console.error('\n❌ Baseline schema is required for Upkeep comparison.');
+      console.error('   Provide --baseline-schema <file>, or confirm a previous schema so schema-restore snapshots exist.');
+      process.exit(1);
+    }
+
+    const baselineSchema = readJsonFile<EventSchema>(baselineFile);
+    const healthFile = opts.healthFile?.trim()
+      ? path.resolve(opts.healthFile)
+      : path.join(artifactDir, TRACKING_HEALTH_FILE);
+
+    const schemaComparisonFile = path.join(artifactDir, 'upkeep-schema-comparison-report.md');
+    const previewFile = path.join(artifactDir, 'upkeep-preview-report.md');
+    const recommendationFile = path.join(artifactDir, 'upkeep-next-step-recommendation.md');
+
+    generateUpkeepArtifacts({
+      artifactDir,
+      currentSchema,
+      baselineSchema,
+      healthFile,
+      schemaComparisonFile,
+      previewFile,
+      recommendationFile,
+    });
+
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      siteUrl: currentSchema.siteUrl,
+      scenario: 'upkeep',
+    });
+
+    console.log(`\n✅ Upkeep reports generated.`);
+    console.log(`   Schema comparison: ${schemaComparisonFile}`);
+    console.log(`   Preview summary: ${previewFile}`);
+    console.log(`   Recommendation: ${recommendationFile}`);
+  });
+
+program
+  .command('generate-health-audit-report <schema-file>')
+  .description('Generate Tracking Health Audit deliverables from candidate schema and live GTM baseline')
+  .option('--live-gtm-analysis <file>', 'Path to live-gtm-analysis.json')
+  .action((schemaFile: string, opts: { liveGtmAnalysis?: string }) => {
+    const resolvedSchemaFile = path.resolve(schemaFile);
+    const artifactDir = path.dirname(resolvedSchemaFile);
+    const activeScenario = getScenarioFromArtifact(artifactDir);
+    if (!['tracking_health_audit', 'legacy'].includes(activeScenario)) {
+      console.error(`\n❌ generate-health-audit-report is not intended for scenario \`${activeScenario}\`.`);
+      console.error(`   Start Tracking Health Audit first: ${formatPublicCommand(['start-scenario', 'tracking_health_audit', artifactDir])}`);
+      process.exit(1);
+    }
+    const schema = readJsonFile<EventSchema>(resolvedSchemaFile);
+    const liveAnalysisFile = opts.liveGtmAnalysis?.trim()
+      ? path.resolve(opts.liveGtmAnalysis)
+      : path.join(artifactDir, 'live-gtm-analysis.json');
+
+    if (!fs.existsSync(liveAnalysisFile)) {
+      console.error('\n❌ live-gtm-analysis.json is required for Tracking Health Audit.');
+      console.error('   Run analyze-live-gtm first or pass --live-gtm-analysis <file>.');
+      process.exit(1);
+    }
+
+    const liveAnalysis = readJsonFile<LiveGtmAnalysis>(liveAnalysisFile);
+    const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
+    const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
+    const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
+    generateHealthAuditArtifacts({
+      artifactDir,
+      schema,
+      liveAnalysis,
+      schemaGapFile,
+      previewFile,
+      recommendationFile,
+    });
+
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      siteUrl: schema.siteUrl,
+      scenario: 'tracking_health_audit',
+    });
+
+    console.log(`\n✅ Tracking Health Audit reports generated.`);
+    console.log(`   Schema gap report: ${schemaGapFile}`);
+    console.log(`   Preview summary: ${previewFile}`);
+    console.log(`   Recommendation: ${recommendationFile}`);
+  });
+
+program
+  .command('run-tracking-update <artifact-path>')
+  .description('Scenario template: start Tracking Update run and generate update deliverables when inputs are ready')
+  .option('--schema-file <file>', 'Path to current event-schema.json (default: <artifact-dir>/event-schema.json)')
+  .option('--baseline-schema <file>', 'Baseline event-schema.json to compare against')
+  .option('--sub-scenario <subScenario>', `Sub-scenario name: ${SUB_SCENARIOS.join(', ')}`)
+  .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
+  .action((artifactPath: string, opts: {
+    schemaFile?: string;
+    baselineSchema?: string;
+    subScenario?: string;
+    inputScope?: string;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const subScenario = parseSubScenario(opts.subScenario, 'none');
+    const inputScope = opts.inputScope?.trim() || undefined;
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario: 'tracking_update',
+      subScenario,
+      inputScope,
+      forceNewRun: true,
+    });
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario: 'tracking_update',
+      subScenario,
+      inputScope,
+    });
+
+    const schemaFile = opts.schemaFile?.trim()
+      ? path.resolve(opts.schemaFile)
+      : path.join(artifactDir, 'event-schema.json');
+    if (!fs.existsSync(schemaFile)) {
+      console.log(`\n⚠️  Tracking Update run started, but ${schemaFile} is missing.`);
+      const next = suggestScenarioNextCommand(artifactDir, 'tracking_update');
+      if (next) {
+        console.log(`   Next step: ${next}`);
+      }
+      return;
+    }
+
+    const baselineFile = opts.baselineSchema?.trim()
+      ? path.resolve(opts.baselineSchema)
+      : findLatestSchemaSnapshot(artifactDir);
+    if (!baselineFile || !fs.existsSync(baselineFile)) {
+      console.log(`\n⚠️  Tracking Update run started, but baseline schema is missing.`);
+      console.log('   Provide --baseline-schema <file>, or confirm a previous schema first.');
+      return;
+    }
+
+    const currentSchema = readJsonFile<EventSchema>(schemaFile);
+    const baselineSchema = readJsonFile<EventSchema>(baselineFile);
+    const diffFile = path.join(artifactDir, 'event-schema-diff-report.md');
+    const summaryFile = path.join(artifactDir, 'tracking-update-change-summary.md');
+    const diff = generateTrackingUpdateArtifacts({
+      artifactDir,
+      currentSchema,
+      baselineSchema,
+      diffFile,
+      summaryFile,
+    });
+
+    console.log(`\n✅ Tracking Update template completed.`);
+    console.log(`   Scenario: tracking_update/${subScenario}`);
+    console.log(`   Diff report: ${diffFile}`);
+    console.log(`   Business summary: ${summaryFile}`);
+    console.log(`   Next guidance: ${summarizeDiffForNextStep(diff)}`);
+  });
+
+program
+  .command('run-new-setup <artifact-path>')
+  .description('Scenario template: start New Setup run and provide guided next step based on current artifacts')
+  .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
+  .action((artifactPath: string, opts: { inputScope?: string }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const inputScope = opts.inputScope?.trim() || undefined;
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario: 'new_setup',
+      subScenario: 'none',
+      inputScope,
+      forceNewRun: true,
+    });
+    const workflowState = refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario: 'new_setup',
+      subScenario: 'none',
+      inputScope,
+    });
+
+    const next = suggestScenarioNextCommand(artifactDir, 'new_setup');
+
+    console.log(`\n✅ New Setup template started.`);
+    console.log(`   Scenario: new_setup`);
+    console.log(`   Run ID: ${workflowState.runId}`);
+    console.log(`   Artifact directory: ${artifactDir}`);
+    if (inputScope) {
+      console.log(`   Input scope: ${inputScope}`);
+    }
+    if (next) {
+      console.log(`   Scenario next step: ${next}`);
+    } else if (workflowState.nextCommand) {
+      console.log(`   Recommended next step: ${workflowState.nextCommand}`);
+    }
+  });
+
+program
+  .command('run-upkeep <artifact-path>')
+  .description('Scenario template: start Upkeep run and generate upkeep deliverables when inputs are ready')
+  .option('--schema-file <file>', 'Path to current event-schema.json (default: <artifact-dir>/event-schema.json)')
+  .option('--baseline-schema <file>', 'Baseline event-schema.json to compare against')
+  .option('--health-file <file>', 'Tracking health file used for upkeep preview summary')
+  .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
+  .action((artifactPath: string, opts: {
+    schemaFile?: string;
+    baselineSchema?: string;
+    healthFile?: string;
+    inputScope?: string;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const inputScope = opts.inputScope?.trim() || undefined;
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario: 'upkeep',
+      subScenario: 'none',
+      inputScope,
+      forceNewRun: true,
+    });
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario: 'upkeep',
+      subScenario: 'none',
+      inputScope,
+    });
+
+    const schemaFile = opts.schemaFile?.trim()
+      ? path.resolve(opts.schemaFile)
+      : path.join(artifactDir, 'event-schema.json');
+    if (!fs.existsSync(schemaFile)) {
+      console.log(`\n⚠️  Upkeep run started, but ${schemaFile} is missing.`);
+      const next = suggestScenarioNextCommand(artifactDir, 'upkeep');
+      if (next) {
+        console.log(`   Next step: ${next}`);
+      }
+      return;
+    }
+
+    const baselineFile = opts.baselineSchema?.trim()
+      ? path.resolve(opts.baselineSchema)
+      : findLatestSchemaSnapshot(artifactDir);
+    if (!baselineFile || !fs.existsSync(baselineFile)) {
+      console.log(`\n⚠️  Upkeep run started, but baseline schema is missing.`);
+      console.log('   Provide --baseline-schema <file>, or confirm a previous schema first.');
+      return;
+    }
+
+    const healthFile = opts.healthFile?.trim()
+      ? path.resolve(opts.healthFile)
+      : path.join(artifactDir, TRACKING_HEALTH_FILE);
+    const currentSchema = readJsonFile<EventSchema>(schemaFile);
+    const baselineSchema = readJsonFile<EventSchema>(baselineFile);
+    const schemaComparisonFile = path.join(artifactDir, 'upkeep-schema-comparison-report.md');
+    const previewFile = path.join(artifactDir, 'upkeep-preview-report.md');
+    const recommendationFile = path.join(artifactDir, 'upkeep-next-step-recommendation.md');
+    generateUpkeepArtifacts({
+      artifactDir,
+      currentSchema,
+      baselineSchema,
+      healthFile,
+      schemaComparisonFile,
+      previewFile,
+      recommendationFile,
+    });
+
+    console.log(`\n✅ Upkeep template completed.`);
+    console.log(`   Scenario: upkeep`);
+    console.log(`   Schema comparison: ${schemaComparisonFile}`);
+    console.log(`   Preview summary: ${previewFile}`);
+    console.log(`   Recommendation: ${recommendationFile}`);
+  });
+
+program
+  .command('run-health-audit <artifact-path>')
+  .description('Scenario template: start Tracking Health Audit run and generate audit deliverables when inputs are ready')
+  .option('--schema-file <file>', 'Path to candidate event-schema.json (default: <artifact-dir>/event-schema.json)')
+  .option('--live-gtm-analysis <file>', 'Path to live-gtm-analysis.json (default: <artifact-dir>/live-gtm-analysis.json)')
+  .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
+  .action((artifactPath: string, opts: {
+    schemaFile?: string;
+    liveGtmAnalysis?: string;
+    inputScope?: string;
+  }) => {
+    const artifactDir = resolveArtifactDirFromInput(artifactPath);
+    const inputScope = opts.inputScope?.trim() || undefined;
+    const runContext = ensureActiveRunContext({
+      artifactDir,
+      scenario: 'tracking_health_audit',
+      subScenario: 'none',
+      inputScope,
+      forceNewRun: true,
+    });
+    refreshAndIndexWorkflowState(artifactDir, undefined, {
+      outputRoot: runContext.outputRoot,
+      siteUrl: runContext.siteUrl,
+      scenario: 'tracking_health_audit',
+      subScenario: 'none',
+      inputScope,
+    });
+
+    const schemaFile = opts.schemaFile?.trim()
+      ? path.resolve(opts.schemaFile)
+      : path.join(artifactDir, 'event-schema.json');
+    const liveAnalysisFile = opts.liveGtmAnalysis?.trim()
+      ? path.resolve(opts.liveGtmAnalysis)
+      : path.join(artifactDir, 'live-gtm-analysis.json');
+    if (!fs.existsSync(schemaFile) || !fs.existsSync(liveAnalysisFile)) {
+      console.log(`\n⚠️  Tracking Health Audit run started, but required files are missing.`);
+      console.log(`   - schema: ${fs.existsSync(schemaFile) ? 'present' : 'missing'} (${schemaFile})`);
+      console.log(`   - live-gtm-analysis: ${fs.existsSync(liveAnalysisFile) ? 'present' : 'missing'} (${liveAnalysisFile})`);
+      const next = suggestScenarioNextCommand(artifactDir, 'tracking_health_audit');
+      if (next) {
+        console.log(`   Next step: ${next}`);
+      }
+      return;
+    }
+
+    const schema = readJsonFile<EventSchema>(schemaFile);
+    const liveAnalysis = readJsonFile<LiveGtmAnalysis>(liveAnalysisFile);
+    const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
+    const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
+    const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
+    generateHealthAuditArtifacts({
+      artifactDir,
+      schema,
+      liveAnalysis,
+      schemaGapFile,
+      previewFile,
+      recommendationFile,
+    });
+
+    console.log(`\n✅ Tracking Health Audit template completed.`);
+    console.log(`   Scenario: tracking_health_audit`);
+    console.log(`   Schema gap report: ${schemaGapFile}`);
+    console.log(`   Preview summary: ${previewFile}`);
+    console.log(`   Recommendation: ${recommendationFile}`);
   });
 
 program.parseAsync(process.argv).catch(err => {

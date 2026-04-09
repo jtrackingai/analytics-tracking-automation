@@ -37,6 +37,15 @@ function assertFileDoesNotContain(relativePath, pattern, message) {
   }
 }
 
+function assertFileContains(relativePath, pattern, message) {
+  const fullPath = path.join(repoRoot, relativePath);
+  const content = fs.readFileSync(fullPath, 'utf8');
+  if (!content.includes(pattern)) {
+    console.error(`Check failed: ${relativePath} is missing ${JSON.stringify(pattern)}. ${message}`);
+    process.exit(1);
+  }
+}
+
 function assertFileExists(relativePath, message) {
   const fullPath = path.join(repoRoot, relativePath);
   if (!fs.existsSync(fullPath)) {
@@ -151,6 +160,11 @@ assertFileDoesNotContain('references/gtm-troubleshooting.md', 'node dist/cli.js'
 assertFileDoesNotContain('SKILL.md', 'https://www.jtracking.ai', 'Keep product marketing out of the core workflow contract.');
 assertFileDoesNotContain('SKILL.md', 'JTracking', 'Keep product marketing out of the core workflow contract.');
 assertFileDoesNotContain('SKILL.md', '## Phase Contracts', 'Keep the root skill at router scope; phase detail belongs in phase skills.');
+assertFileContains('README.md', './event-tracking scenario <artifact-dir>', 'Keep metadata-only scenario management visible in the public README surface.');
+assertFileContains('README.md', './event-tracking sync <artifact-dir>/gtm-config.json --dry-run', 'Keep GTM dry-run planning visible in the public README surface.');
+assertFileContains('README.md', './event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json --gtm-id GTM-XXXXXXX[,GTM-YYYYYYY]', 'Keep live GTM override guidance visible in the public README surface.');
+assertFileContains('README.md', './event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json --baseline <previous-tracking-health.json>', 'Keep preview baseline comparison visible in the public README surface.');
+assertFileContains('README.md', './event-tracking auth-clear --context-file <artifact-dir>/gtm-context.json', 'Keep OAuth cache reset visible in the public README surface.');
 phaseSkillFiles.forEach(relativePath => {
   assertFileDoesNotContain(relativePath, 'node dist/cli.js', 'Phase skills should use the public wrapper.');
   assertFileDoesNotContain(relativePath, 'https://www.jtracking.ai', 'Keep product marketing out of phase skills.');
