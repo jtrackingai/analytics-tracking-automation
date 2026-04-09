@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and usage help
+    url: https://github.com/jtrackingai/event-tracking-skill/discussions
+    about: Ask setup and usage questions in Discussions.
+  - name: Early ideas and product feedback
+    url: https://github.com/jtrackingai/event-tracking-skill/discussions
+    about: Use Discussions for broader ideas before opening a scoped issue.
