@@ -176,6 +176,9 @@ test('confirm-page-groups updates review metadata and status can resume from a f
 
   const confirmResult = runCli(['confirm-page-groups', analysisFile, '--yes']);
   assert.equal(confirmResult.status, 0, confirmResult.combinedOutput);
+  assert.match(confirmResult.stdout, /Page Group Summary/);
+  assert.match(confirmResult.stdout, /Group Table/);
+  assert.doesNotMatch(confirmResult.stdout, /URLs:/);
 
   const updatedAnalysis = readJson(analysisFile);
   assert.equal(updatedAnalysis.pageGroupsReview.status, 'confirmed');

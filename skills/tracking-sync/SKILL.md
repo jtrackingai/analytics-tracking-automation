@@ -48,6 +48,12 @@ For Shopify runs, also expect:
 - `<artifact-dir>/shopify-custom-pixel.js`
 - `<artifact-dir>/shopify-install.md`
 
+## Closeout Style
+
+- default to a short answer-first sync summary before listing files
+- summarize what was generated or synced, what still needs manual selection or approval, and any blocking checklist items first
+- keep file listings and follow-up commands after the summary
+
 ## Stop Boundary
 
 Stop after sync unless the user explicitly asks for verification.

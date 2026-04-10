@@ -16,8 +16,9 @@ Use this skill when the work starts from `site-analysis.json` and the goal is to
 1. Read the current `pageGroups` and page inventory.
 2. Group pages by business purpose, not just URL shape.
 3. Present a concise table with group name, content type, URL pattern, and pages.
-4. Ask the user to confirm or adjust the grouping.
-5. Record approval with:
+4. Default to a reviewable summary first: total groups, grouping logic, and a compact table. Do not dump raw URL lists unless the user explicitly asks for them.
+5. Ask the user to confirm or adjust the grouping.
+6. Record approval with:
 
 ```bash
 ./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json
@@ -29,6 +30,12 @@ Produce and share:
 
 - updated `<artifact-dir>/site-analysis.json`
 - updated `<artifact-dir>/workflow-state.json`
+
+## Closeout Style
+
+- default to a page-group summary first: group count, grouping logic, and a compact group table
+- keep the summary reviewable in chat; do not dump full raw URL lists unless the user explicitly asks
+- list files and the next command only after the summary
 
 ## Stop Boundary
 

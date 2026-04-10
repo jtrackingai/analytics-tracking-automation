@@ -226,6 +226,9 @@ test('generate-spec writes tracking-plan-comparison.md when live GTM baseline is
   const result = runCli(['generate-spec', schemaFile]);
   assert.equal(result.status, 0, result.combinedOutput);
   assert.match(result.combinedOutput, /Comparison report:/);
+  assert.match(result.combinedOutput, /A\. Event Table/);
+  assert.match(result.combinedOutput, /B\. Common Properties/);
+  assert.match(result.combinedOutput, /C\. Event-specific Properties/);
 
   const comparisonFile = path.join(artifactDir, 'tracking-plan-comparison.md');
   assert.ok(fs.existsSync(comparisonFile), 'comparison report should be generated');
@@ -467,6 +470,13 @@ test('generate-upkeep-report writes upkeep deliverables', t => {
     baselineFile,
   ]);
   assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /A\. Current tracking health summary/);
+  assert.match(result.combinedOutput, /B\. Current vs baseline comparison/);
+  assert.match(result.combinedOutput, /C\. Next-step guidance/);
+  assert.ok(
+    result.combinedOutput.indexOf('A. Current tracking health summary') < result.combinedOutput.indexOf('Files'),
+    result.combinedOutput,
+  );
   const schemaComparisonFile = path.join(artifactDir, 'upkeep-schema-comparison-report.md');
   const previewFile = path.join(artifactDir, 'upkeep-preview-report.md');
   const recommendationFile = path.join(artifactDir, 'upkeep-next-step-recommendation.md');
@@ -502,6 +512,14 @@ test('generate-health-audit-report writes audit deliverables from live GTM basel
     liveFile,
   ]);
   assert.equal(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /A\. Legacy \/ live tracking summary/);
+  assert.match(result.combinedOutput, /Current audit run has no formal preview-verified automation evidence/);
+  assert.match(result.combinedOutput, /`signup_click`/);
+  assert.match(result.combinedOutput, /`pricing_click`/);
+  assert.ok(
+    result.combinedOutput.indexOf('A. Legacy / live tracking summary') < result.combinedOutput.indexOf('Files'),
+    result.combinedOutput,
+  );
   const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
   const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
   const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
@@ -651,6 +669,7 @@ test('run-upkeep template starts scenario and writes upkeep deliverables', t => 
   ]);
   assert.equal(result.status, 0, result.combinedOutput);
   assert.match(result.combinedOutput, /Upkeep template completed/);
+  assert.match(result.combinedOutput, /A\. Current tracking health summary/);
 
   const state = readJson(path.join(artifactDir, 'workflow-state.json'));
   assert.equal(state.scenario, 'upkeep');
@@ -693,6 +712,7 @@ test('run-health-audit template starts scenario and writes audit deliverables', 
   ]);
   assert.equal(result.status, 0, result.combinedOutput);
   assert.match(result.combinedOutput, /Tracking Health Audit template completed/);
+  assert.match(result.combinedOutput, /Current audit run has no formal preview-verified automation evidence/);
 
   const state = readJson(path.join(artifactDir, 'workflow-state.json'));
   assert.equal(state.scenario, 'tracking_health_audit');

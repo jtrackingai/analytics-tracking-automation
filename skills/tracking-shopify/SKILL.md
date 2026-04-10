@@ -57,6 +57,12 @@ Expect some or all of:
 - `<artifact-dir>/shopify-install.md`
 - updated `<artifact-dir>/workflow-state.json`
 
+## Closeout Style
+
+- default to a short Shopify-specific summary before listing files
+- explain whether the current output is schema guidance, install guidance, or manual verification guidance
+- keep artifact references after the summary, not before it
+
 ## Stop Boundary
 
 Stop after the Shopify-specific artifact or manual verification plan the user asked for.

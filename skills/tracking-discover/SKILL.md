@@ -45,6 +45,13 @@ Report:
 - detected live GTM container IDs
 - detected platform
 
+## Closeout Style
+
+- default to a short human-readable analysis summary before listing files
+- summarize coverage, platform, GTM detection, and notable warnings first
+- do not dump raw page HTML, raw JSON, or full URL inventories unless the user explicitly asks for them
+- list generated files and the next command only after the summary
+
 ## Stop Boundary
 
 Unless the user explicitly asks for the next phase, stop after analysis.

@@ -77,6 +77,7 @@ test('skill manifest stays aligned with skill docs and metadata', () => {
 
     if (bundle.kind === 'phase') {
       assert.match(skillContent, /^## Stop Boundary$/m, `${bundle.skillFile} should declare a Stop Boundary section.`);
+      assert.match(skillContent, /^## Closeout Style$/m, `${bundle.skillFile} should declare a Closeout Style section.`);
     }
 
     assert.match(metadataContent, /display_name:/, `${bundle.metadataFile} should declare display_name.`);
@@ -116,6 +117,7 @@ test('root skill metadata and docs keep conversation-first routing explicit', ()
   assert.match(metadata, /analysis-only request/i, 'Root skill metadata should mention analysis-only intake.');
   assert.match(readme, /Do not ask the user whether they want `scenario` or `analyze`;/, 'README should explain the conversation-first intake rule.');
   assert.match(docsSkillMap, /first-turn conversational intake/i, 'docs\\/skills.md should describe conversation-first routing for the root skill.');
+  assert.match(docsSkillMap, /answer-first summaries/i, 'docs\\/skills.md should document answer-first closeout style.');
 });
 
 test('Shopify phase skill owns the Shopify-specific branch contract', () => {

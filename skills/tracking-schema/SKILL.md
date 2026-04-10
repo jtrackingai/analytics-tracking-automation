@@ -38,8 +38,8 @@ During review:
 
 - explain what live tracking problems the schema fixes when `live-gtm-analysis.json` is present
 - explain what benefits the new schema brings compared with the current live baseline
-- show the event list
-- show grouped parameter tables per event
+- default to a compact tracking-plan summary in this order: `Event Table`, `Common Properties`, `Event-specific Properties`
+- keep long parameter inventories out of the main event table
 - stop for user approval before GTM generation
 
 ## Required Output
@@ -52,6 +52,13 @@ Produce and share:
 - `<artifact-dir>/schema-decisions.jsonl` after schema confirmation
 - `<artifact-dir>/schema-restore/` restore snapshots after schema confirmation
 - updated `<artifact-dir>/workflow-state.json`
+
+## Closeout Style
+
+- default to a decision-ready tracking-plan summary before listing files
+- keep the chat structure in this order: `Event Table`, `Common Properties`, `Event-specific Properties`
+- if a live baseline comparison exists, keep it as a compact appendix rather than replacing the tracking-plan structure
+- list files and next steps only after the summary
 
 ## Stop Boundary
 

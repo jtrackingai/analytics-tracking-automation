@@ -55,6 +55,12 @@ Produce and share:
 - `<artifact-dir>/tracking-health-history/`
 - updated `<artifact-dir>/workflow-state.json`
 
+## Closeout Style
+
+- default to a verification verdict first: healthy, blocked, or manual follow-up required
+- summarize blockers, unexpected events, and release-readiness in plain language before listing files
+- keep raw preview data and artifact references after the summary
+
 ## Stop Boundary
 
 - stop after preview if the user only asked for QA

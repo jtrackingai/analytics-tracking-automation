@@ -87,6 +87,12 @@ import {
   renderHealthAuditRecommendationReport,
   renderHealthAuditSchemaGapReport,
 } from './reporter/health-audit';
+import {
+  renderAuditSummary,
+  renderPageGroupSummary,
+  renderTrackingPlanSummary,
+  renderUpkeepSummary,
+} from './reporter/summary-presenter';
 
 const program = new Command();
 
@@ -725,7 +731,13 @@ function generateUpkeepArtifacts(args: {
   schemaComparisonFile: string;
   previewFile: string;
   recommendationFile: string;
-}): SchemaDiffResult {
+}): {
+  diff: SchemaDiffResult;
+  health: TrackingHealthReport | null;
+  previewResult: PreviewResult | null;
+  previewAssessment: ReturnType<typeof assessUpkeepPreview>;
+  nextStep: ReturnType<typeof decideUpkeepNextStep>;
+} {
   const diff = diffEventSchemas(args.currentSchema, args.baselineSchema);
   const health = readTrackingHealthReport(args.healthFile);
   const previewResult = tryReadJsonFile<PreviewResult>(args.previewResultFile);
@@ -814,7 +826,13 @@ function generateUpkeepArtifacts(args: {
     stage: 'upkeep_report',
   });
 
-  return diff;
+  return {
+    diff,
+    health,
+    previewResult,
+    previewAssessment,
+    nextStep,
+  };
 }
 
 function generateHealthAuditArtifacts(args: {
@@ -825,7 +843,13 @@ function generateHealthAuditArtifacts(args: {
   schemaGapFile: string;
   previewFile: string;
   recommendationFile: string;
-}): void {
+}): {
+  baseline: ReturnType<typeof buildExistingTrackingBaseline>;
+  liveDelta: ReturnType<typeof compareSchemaToLiveTracking>;
+  gapSummary: ReturnType<typeof analyzeHealthAuditSchemaGaps>;
+  previewSummary: ReturnType<typeof analyzeHealthAuditPreview>;
+  recommendation: ReturnType<typeof decideHealthAuditNextStep>;
+} {
   const baseline = buildExistingTrackingBaseline(args.liveAnalysis);
   const liveDelta = compareSchemaToLiveTracking(args.schema, args.liveAnalysis);
   const gapSummary = analyzeHealthAuditSchemaGaps({
@@ -890,6 +914,14 @@ function generateHealthAuditArtifacts(args: {
     content: recommendationLines.join('\n'),
     stage: 'tracking_health_audit_report',
   });
+
+  return {
+    baseline,
+    liveDelta,
+    gapSummary,
+    previewSummary,
+    recommendation,
+  };
 }
 
 function refreshAndIndexWorkflowState(
@@ -944,13 +976,14 @@ function parseCommaSeparatedList(value?: string): string[] {
 }
 
 function printPageGroupsSummary(pageGroups: SiteAnalysis['pageGroups']): void {
-  console.log('\n📋 Current page groups:');
-  pageGroups.forEach((group, idx) => {
-    const pattern = group.urlPattern || '(all pages)';
-    const label = group.displayName || group.name;
-    console.log(`   [${idx + 1}] ${label} | ${group.contentType} | ${pattern} | ${group.urls.length} page(s)`);
-    console.log(`       URLs: ${group.urls.join(', ')}`);
-  });
+  console.log(`\n${renderPageGroupSummary(pageGroups)}`);
+}
+
+function printFilesSection(title: string, entries: Array<[string, string]>): void {
+  console.log(`\n${title}`);
+  for (const [label, value] of entries) {
+    console.log(`- ${label}: ${value}`);
+  }
 }
 
 function writeShopifyPreviewInstructions(
@@ -1273,9 +1306,13 @@ program
     const workflowState = refreshAndIndexWorkflowState(artifactDir);
 
     console.log(`\n✅ Page groups confirmed.`);
-    console.log(`   Confirmation recorded in: ${resolvedFile}`);
+    console.log(renderPageGroupSummary(analysis.pageGroups));
+    printFilesSection('Files', [
+      ['Confirmed page groups', resolvedFile],
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
     if (workflowState.nextCommand) {
-      console.log(`   Next step: ${workflowState.nextCommand}`);
+      console.log(`\nNext step: ${workflowState.nextCommand}`);
     }
   });
 
@@ -2864,21 +2901,20 @@ program
 
     refreshAndIndexWorkflowState(artifactDir);
 
-    console.log(`\n✅ Event spec generated: ${outFile}`);
-    console.log(`   ${schema.events.length} events documented`);
-    if (liveDelta) {
-      console.log(`   Live baseline comparison: ${liveDelta.reusedEventCount} reused, ${liveDelta.newEventCount} new`);
-      if (liveDelta.problemsSolved.length > 0) {
-        console.log(`   Solves: ${liveDelta.problemsSolved[0]}`);
-      }
-      if (baseline) {
-        console.log(`   Comparison report: ${comparisonOutFile}`);
-      }
-    }
+    console.log(`\n✅ Event spec generated.`);
+    console.log(renderTrackingPlanSummary({
+      schema,
+      baseline,
+      liveDelta,
+    }));
     if (quota.customDimensions > 0) {
-      console.log(`   ${quota.customDimensions} custom dimensions listed`);
+      console.log(`\nCustom dimensions to register in GA4: ${quota.customDimensionNames.map(name => `\`${name}\``).join(', ')}`);
     }
-    console.log(`   Workflow state: ${path.join(artifactDir, WORKFLOW_STATE_FILE)}`);
+    printFilesSection('Files', [
+      ['Event spec', outFile],
+      ...(baseline && liveDelta ? [['Comparison report', comparisonOutFile] as [string, string]] : []),
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
   });
 
 program
@@ -2970,7 +3006,7 @@ program
     const previewFile = path.join(artifactDir, 'upkeep-preview-report.md');
     const recommendationFile = path.join(artifactDir, 'upkeep-next-step-recommendation.md');
 
-    generateUpkeepArtifacts({
+    const upkeepArtifacts = generateUpkeepArtifacts({
       artifactDir,
       currentSchema,
       baselineSchema,
@@ -2987,9 +3023,21 @@ program
     });
 
     console.log(`\n✅ Upkeep reports generated.`);
-    console.log(`   Schema comparison: ${schemaComparisonFile}`);
-    console.log(`   Preview summary: ${previewFile}`);
-    console.log(`   Recommendation: ${recommendationFile}`);
+    console.log(renderUpkeepSummary({
+      currentSchema,
+      baselineSchema,
+      diff: upkeepArtifacts.diff,
+      previewAssessment: upkeepArtifacts.previewAssessment,
+      nextStep: upkeepArtifacts.nextStep,
+      health: upkeepArtifacts.health,
+      previewResult: upkeepArtifacts.previewResult,
+    }));
+    printFilesSection('Files', [
+      ['Schema comparison', schemaComparisonFile],
+      ['Preview summary', previewFile],
+      ['Recommendation', recommendationFile],
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
   });
 
 program
@@ -3039,7 +3087,7 @@ program
     const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
     const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
     const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
-    generateHealthAuditArtifacts({
+    const auditArtifacts = generateHealthAuditArtifacts({
       artifactDir,
       schema,
       analysis,
@@ -3055,9 +3103,23 @@ program
     });
 
     console.log(`\n✅ Tracking Health Audit reports generated.`);
-    console.log(`   Schema gap report: ${schemaGapFile}`);
-    console.log(`   Preview summary: ${previewFile}`);
-    console.log(`   Recommendation: ${recommendationFile}`);
+    console.log(renderAuditSummary({
+      schema,
+      analysis,
+      baseline: auditArtifacts.baseline,
+      liveDelta: auditArtifacts.liveDelta,
+      gapSummary: auditArtifacts.gapSummary,
+      previewSummary: auditArtifacts.previewSummary,
+      recommendation: auditArtifacts.recommendation,
+      health: readTrackingHealthReport(path.join(artifactDir, TRACKING_HEALTH_FILE)),
+      previewResult: tryReadJsonFile<PreviewResult>(path.join(artifactDir, 'preview-result.json')),
+    }));
+    printFilesSection('Files', [
+      ['Schema gap report', schemaGapFile],
+      ['Preview summary', previewFile],
+      ['Recommendation', recommendationFile],
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
   });
 
 program
@@ -3316,7 +3378,7 @@ program
     const schemaComparisonFile = path.join(artifactDir, 'upkeep-schema-comparison-report.md');
     const previewFile = path.join(artifactDir, 'upkeep-preview-report.md');
     const recommendationFile = path.join(artifactDir, 'upkeep-next-step-recommendation.md');
-    generateUpkeepArtifacts({
+    const upkeepArtifacts = generateUpkeepArtifacts({
       artifactDir,
       currentSchema,
       baselineSchema,
@@ -3332,13 +3394,25 @@ program
     });
 
     console.log(`\n✅ Upkeep template completed.`);
-    console.log(`   Scenario: upkeep`);
-    console.log(`   Site analysis: ${analysisFile}`);
-    console.log(`   Current schema: ${schemaFile}`);
-    console.log(`   Baseline schema: ${baselineFile}`);
-    console.log(`   Schema comparison: ${schemaComparisonFile}`);
-    console.log(`   Preview summary: ${previewFile}`);
-    console.log(`   Recommendation: ${recommendationFile}`);
+    console.log(renderUpkeepSummary({
+      currentSchema,
+      baselineSchema,
+      diff: upkeepArtifacts.diff,
+      previewAssessment: upkeepArtifacts.previewAssessment,
+      nextStep: upkeepArtifacts.nextStep,
+      health: upkeepArtifacts.health,
+      previewResult: upkeepArtifacts.previewResult,
+    }));
+    printFilesSection('Files', [
+      ['Scenario', 'upkeep'],
+      ['Site analysis', analysisFile],
+      ['Current schema', schemaFile],
+      ['Baseline schema', baselineFile],
+      ['Schema comparison', schemaComparisonFile],
+      ['Preview summary', previewFile],
+      ['Recommendation', recommendationFile],
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
   });
 
 program
@@ -3409,7 +3483,7 @@ program
       const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
       const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
       const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
-      generateHealthAuditArtifacts({
+      const auditArtifacts = generateHealthAuditArtifacts({
         artifactDir,
         schema,
         analysis,
@@ -3425,13 +3499,27 @@ program
         inputScope,
       });
       console.log(`\n✅ Tracking Health Audit template completed (legacy input mode).`);
-      console.log(`   Scenario: tracking_health_audit`);
-      console.log(`   Candidate schema: ${legacySchemaFile}`);
-      console.log(`   Live baseline: ${legacyLiveAnalysisFile}`);
-      console.log(`   Schema gap report: ${schemaGapFile}`);
-      console.log(`   Preview summary: ${previewFile}`);
-      console.log(`   Recommendation: ${recommendationFile}`);
-      console.log(`   Note: pass --url to force a fresh crawl-first health audit.`);
+      console.log(renderAuditSummary({
+        schema,
+        analysis,
+        baseline: auditArtifacts.baseline,
+        liveDelta: auditArtifacts.liveDelta,
+        gapSummary: auditArtifacts.gapSummary,
+        previewSummary: auditArtifacts.previewSummary,
+        recommendation: auditArtifacts.recommendation,
+        health: readTrackingHealthReport(path.join(artifactDir, TRACKING_HEALTH_FILE)),
+        previewResult: tryReadJsonFile<PreviewResult>(path.join(artifactDir, 'preview-result.json')),
+      }));
+      printFilesSection('Files', [
+        ['Scenario', 'tracking_health_audit'],
+        ['Candidate schema', legacySchemaFile],
+        ['Live baseline', legacyLiveAnalysisFile],
+        ['Schema gap report', schemaGapFile],
+        ['Preview summary', previewFile],
+        ['Recommendation', recommendationFile],
+        ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+      ]);
+      console.log('\nNote: pass --url to force a fresh crawl-first health audit.');
       return;
     }
 
@@ -3535,7 +3623,7 @@ program
     const schemaGapFile = path.join(artifactDir, 'tracking-health-schema-gap-report.md');
     const previewFile = path.join(artifactDir, 'tracking-health-preview-report.md');
     const recommendationFile = path.join(artifactDir, 'tracking-health-next-step-recommendation.md');
-    generateHealthAuditArtifacts({
+    const auditArtifacts = generateHealthAuditArtifacts({
       artifactDir,
       schema,
       analysis: siteAnalysis,
@@ -3552,14 +3640,28 @@ program
     });
 
     console.log(`\n✅ Tracking Health Audit template completed.`);
-    console.log(`   Scenario: tracking_health_audit`);
-    console.log(`   Site analysis: ${analysisFile}`);
-    console.log(`   Live baseline: ${liveAnalysisFile}`);
-    console.log(`   Candidate schema: ${schemaFile}`);
-    console.log(`   Schema gap report: ${schemaGapFile}`);
-    console.log(`   Preview summary: ${previewFile}`);
-    console.log(`   Recommendation: ${recommendationFile}`);
-    console.log(`   Note: gtm-config.json is not generated in tracking_health_audit.`);
+    console.log(renderAuditSummary({
+      schema,
+      analysis: siteAnalysis,
+      baseline: auditArtifacts.baseline,
+      liveDelta: auditArtifacts.liveDelta,
+      gapSummary: auditArtifacts.gapSummary,
+      previewSummary: auditArtifacts.previewSummary,
+      recommendation: auditArtifacts.recommendation,
+      health: readTrackingHealthReport(path.join(artifactDir, TRACKING_HEALTH_FILE)),
+      previewResult: tryReadJsonFile<PreviewResult>(path.join(artifactDir, 'preview-result.json')),
+    }));
+    printFilesSection('Files', [
+      ['Scenario', 'tracking_health_audit'],
+      ['Site analysis', analysisFile],
+      ['Live baseline', liveAnalysisFile],
+      ['Candidate schema', schemaFile],
+      ['Schema gap report', schemaGapFile],
+      ['Preview summary', previewFile],
+      ['Recommendation', recommendationFile],
+      ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
+    ]);
+    console.log('\nNote: gtm-config.json is not generated in tracking_health_audit.');
   });
 
 program.parseAsync(process.argv).catch(err => {
