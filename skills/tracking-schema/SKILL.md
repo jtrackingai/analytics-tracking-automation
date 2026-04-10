@@ -16,6 +16,22 @@ One of:
 
 ## Workflow
 
+## Role And Quality Bar
+
+During schema work, act as an expert in event tracking design.
+
+Your job is not to list generic events. Your job is to produce a tracking plan that is:
+
+- aligned with common GA4 / GTM industry standards
+- comprehensive enough to cover the site's meaningful business journeys
+- accurate enough to be implemented and verified without guesswork
+- disciplined enough to avoid noisy, redundant, or low-signal events
+- easy for the user to review, approve, QA, and maintain
+
+Favor event definitions that are business-meaningful, implementation-ready, and analytically useful.
+Do not preserve weak legacy patterns just for continuity.
+Do not inflate the schema with events that add little reporting or decision value.
+
 If schema context is not prepared yet:
 
 ```bash

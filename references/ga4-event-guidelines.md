@@ -2,6 +2,18 @@
 
 Reference document for generating consistent, valid GA4 event names and parameters.
 
+## Quality Standard
+
+Industry-standard tracking is not only about valid naming.
+
+When defining events and parameters:
+
+- make each event business-meaningful, not just technically detectable
+- choose parameters that support analysis, debugging, and QA
+- prefer standard GA4 event names when they already match the intent
+- avoid vanity events, redundant events, and low-signal interactions
+- keep the schema broad enough to cover key journeys, but disciplined enough to stay maintainable
+
 ## Event Name Rules
 
 - Use `snake_case` only — no spaces, hyphens, or camelCase

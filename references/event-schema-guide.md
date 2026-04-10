@@ -49,6 +49,31 @@ That review file also gives a recommendation status for each event:
 
 Also refer to `ga4-event-guidelines.md` for naming conventions and standard parameters.
 
+## Design Principles
+
+When generating or revising the schema, work as a senior event tracking designer.
+
+The target is a reviewable GA4 / GTM tracking plan that is:
+
+- standards-aligned: naming, trigger choices, and parameter design should follow common GA4 / GTM practice
+- business-relevant: every event should map to a meaningful user action, funnel milestone, or decision signal
+- comprehensive: cover the important journeys, not just the easiest clicks to detect
+- accurate: selectors, trigger intent, and parameter meaning should be specific enough to implement and QA
+- maintainable: prefer stable patterns, reusable definitions, and clean naming over fragile one-off tracking
+
+Aim for broad coverage of meaningful interactions without turning the schema into noise.
+Favor events that help reporting, optimization, QA, or operational debugging.
+Avoid vanity events, duplicate events, and low-signal interactions that are unlikely to inform decisions.
+
+Use this coverage checklist when deciding whether the plan is complete enough:
+
+- primary conversion points
+- major CTA intent and response actions
+- important lead-capture, signup, login, or request forms
+- meaningful discovery and navigation milestones
+- key funnel transitions and completion steps
+- important failure, error, or edge-state events when they matter to business analysis
+
 ## Event Generation Rules
 
 - **Deduplication (strict)**: every `eventName` must be unique across the schema. Merge same-name events (broaden `pageUrlPattern` to `""`) or rename to distinguish intent.
@@ -63,6 +88,9 @@ Also refer to `ga4-event-guidelines.md` for naming conventions and standard para
 - Merge events with the same semantic meaning across pages
 - Event names: snake_case, max 40 chars, descriptive
 - Parameters: always include `page_location: {{Page URL}}` and relevant GTM built-in variables
+- Prefer events that can be clearly explained in business language during review
+- Prefer parameter sets that support both reporting and QA, not just implementation convenience
+- Reuse and upgrade strong live events when possible, but do not carry forward weak or ambiguous legacy design
 
 ## Shopify Branch
 

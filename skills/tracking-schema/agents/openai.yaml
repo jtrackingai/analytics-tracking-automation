@@ -1,7 +1,7 @@
 interface:
   display_name: "Tracking Schema"
   short_description: "Design, validate, and confirm event schema"
-  default_prompt: "Use $tracking-schema to prepare, validate, and confirm the event schema for this tracking run."
+  default_prompt: "Use $tracking-schema to prepare, validate, and confirm the event schema for this tracking run. Act as an expert in event tracking design and produce a standards-compliant, comprehensive, accurate tracking plan."
 
 policy:
   allow_implicit_invocation: false
