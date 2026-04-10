@@ -115,7 +115,8 @@ test('root skill metadata and docs keep conversation-first routing explicit', ()
 
   assert.match(metadata, /new setup/i, 'Root skill metadata should mention new setup intake.');
   assert.match(metadata, /analysis-only request/i, 'Root skill metadata should mention analysis-only intake.');
-  assert.match(readme, /Do not ask the user whether they want `scenario` or `analyze`;/, 'README should explain the conversation-first intake rule.');
+  assert.match(readme, /The intended experience is simple: tell your agent what you want in plain language\./, 'README should keep the user-facing experience conversation-first.');
+  assert.match(readme, /Example Prompts/, 'README should show prompt-oriented quick start examples.');
   assert.match(docsSkillMap, /first-turn conversational intake/i, 'docs\\/skills.md should describe conversation-first routing for the root skill.');
   assert.match(docsSkillMap, /answer-first summaries/i, 'docs\\/skills.md should document answer-first closeout style.');
 });
@@ -151,8 +152,8 @@ test('Codex install docs cover the default minimal install and optional phase in
   assert.match(readme, /\[docs\/README\.install\.md\]\(docs\/README\.install\.md\)/, 'README should link to the shared install guide.');
   assert.match(readme, /\[docs\/README\.codex\.md\]\(docs\/README\.codex\.md\)/, 'README should link to the Codex guide.');
   assert.match(readme, /Most users only need the umbrella skill\./, 'README should keep the default install path minimal and explicit.');
-  assert.match(readme, /do not want to clone the repository/, 'README should distinguish the no-clone path from the repo-based installer path.');
+  assert.match(readme, /If you do not want to clone the repository, install the root skill directly:/, 'README should distinguish the no-clone path from the repo-based installer path.');
   assert.match(readme, /\[DEVELOPING\.md\]\(DEVELOPING\.md\)/, 'README should route repo-local CLI and maintainer setup to DEVELOPING.md.');
-  assert.doesNotMatch(readme, /### Repo-Local CLI Setup/, 'README should not mix the maintainer setup section into the main install flow.');
-  assert.doesNotMatch(readme, /### Manual Installation \/ Local Development/, 'README should not duplicate local-development instructions in the main install flow.');
+  assert.doesNotMatch(readme, /## Advanced Commands/, 'README should no longer foreground CLI-heavy command inventory.');
+  assert.doesNotMatch(readme, /## Workflow/, 'README should no longer read like the internal workflow contract.');
 });

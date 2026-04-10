@@ -6,50 +6,46 @@
   Works with Cursor · Codex · Any AI Agent
 </p>
 <p align="center">
-  <a href="#What-You-Get">What You Get</a> · 
+  <a href="#what-you-get">What You Get</a> ·
+  <a href="#installation">Installation</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="https://www.jtracking.ai/skills">Website</a>
 </p>
 
 # Event Tracking Skill
 
-`event-tracking-skill` is a local-first skill and CLI for planning, generating, validating, and syncing GA4 event tracking in Google Tag Manager.
+`event-tracking-skill` is a local-first AI skill for planning, reviewing, and delivering GA4 + GTM tracking.
 
-It keeps the implementation reviewable from crawl to publish:
+Use it when you want an agent to help with:
 
-1. analyze a site
-2. group pages by business intent
-3. prepare schema context
-4. review the event schema
-5. generate GTM config
-6. sync to a GTM workspace
-7. verify in Preview Mode or the Shopify manual flow
-8. publish with more confidence
+- analyzing a site before tracking work starts
+- grouping pages by business purpose
+- designing or reviewing a GA4 event plan
+- comparing a proposed plan with an existing live GTM setup
+- preparing GTM-ready outputs and verification guidance
+- handling both generic websites and Shopify storefronts
+
+This README is intentionally user-facing and conversation-first.
+If you need the CLI surface or maintainer workflow, use [DEVELOPING.md](DEVELOPING.md).
 
 ## What You Get
 
-For a given website, this skill can help you:
+For a given website, this skill can help produce:
 
-- analyze page structure, shared UI, platform signals, and existing `dataLayer` usage
-- organize pages into business-purpose groups before defining events
-- generate a reviewable GA4 event schema and stakeholder-friendly event spec
-- turn the approved schema into GTM-ready tags, triggers, and variables
-- sync to GTM, verify before publish, and keep the whole flow artifact-driven
-- resume recent runs, audit schema decisions, and compare preview health against a baseline
-- support both generic websites and Shopify storefronts with different verification paths
+- a reviewable site analysis
+- business-friendly page groups
+- a compact, decision-ready tracking plan
+- GTM-ready tracking outputs
+- verification and health summaries before go-live
+- artifact-backed progress that can be resumed later
 
 ## Installation
 
-### Install Into A Local Agent Skills Directory (Recommended)
-
-There are two install paths:
-
-- if you already have this repository checked out locally, use the built-in installer below
-- if you do not want to clone the repository, skip to `npx skills add ...`
-
 Most users only need the umbrella skill.
 
-If you want the built-in installer, first clone the repo and run the installer from the repo root:
+### Recommended
+
+Clone the repository locally, then install the skill into your agent skills directory:
 
 ```bash
 git clone https://github.com/jtrackingai/event-tracking-skill.git
@@ -57,363 +53,118 @@ cd event-tracking-skill
 npm run install:skills
 ```
 
-That installs `event-tracking-skill` into the default skills directory with installer-managed auto-update metadata.
-You do not need `npm ci` just to install the exported skill bundles.
+### No-Clone Alternative
 
-If you already know you want the full phase-oriented family installed together, make that explicit:
-
-```bash
-npm run install:skills -- --with-phases
-```
-
-This is the recommended install path for Codex and also the most portable path for other agent environments that can load skills from a local directory.
-
-Codex defaults:
-
-- `$CODEX_HOME/skills` when `CODEX_HOME` is set
-- otherwise `~/.codex/skills`
-
-For other agent runtimes, point the installer at that runtime's skills directory:
-
-```bash
-npm run install:skills -- --target-dir /path/to/agent/skills
-```
-
-If you also want the phase skills in a custom directory:
-
-```bash
-npm run install:skills -- --target-dir /path/to/agent/skills --with-phases
-```
-
-For local development only, if you want the installed skills to stay pointed at local exported bundles:
-
-```bash
-npm run install:skills -- --mode link
-```
-
-To link the full skill family during local iteration:
-
-```bash
-npm run install:skills -- --mode link --with-phases
-```
-
-Auto-update behavior:
-
-- `copy` installs are the recommended user path and can self-check for newer GitHub versions
-- `link` installs are for local development only and intentionally do not auto-update from GitHub
-- older installer-managed copies need one reinstall through `npm run install:skills` before they gain the installed auto-update bootstrap
-
-Use [docs/README.codex.md](docs/README.codex.md) for Codex-specific defaults, update notes, and troubleshooting.
-Use [docs/README.install.md](docs/README.install.md) for the full shared agent-install guide.
-
-### Install with skills.sh (Alternative)
-
-Use this if you want to install the skill into your local agent skills directory without cloning the repository first.
+If you do not want to clone the repository, install the root skill directly:
 
 ```bash
 npx skills add jtrackingai/event-tracking-skill
 ```
 
-This portable install can self-check for updates too. On the first successful self-update it rewrites the installed copy into the repo's normal copy-mode layout.
+For advanced install options, exported skill bundles, and Codex-specific notes:
 
-If you want the full umbrella + phase-skill family installed together from the start, use `npm run install:skills -- --with-phases`.
-
-If you want the repo-local CLI, contributor setup, or local development workflow, use [DEVELOPING.md](DEVELOPING.md) instead of treating README as a maintainer guide.
-
-## Documentation Map
-
-- [README.md](README.md) for installation, quick start, and the public command surface
-- [docs/README.install.md](docs/README.install.md) for the shared agent-install flow, copy vs link behavior, and auto-update notes
-- [ARCHITECTURE.md](ARCHITECTURE.md) for artifact lifecycle, branch behavior, and system boundaries
-- [DEVELOPING.md](DEVELOPING.md) for maintainer commands, edit rules, and release checks
-- [docs/README.codex.md](docs/README.codex.md) for Codex-specific defaults and troubleshooting on top of the generic installer flow
-- [docs/skills.md](docs/skills.md) for the umbrella skill and phase-skill map
-- [SKILL.md](SKILL.md) for the agent-facing workflow contract
-
-## Skill Family
-
-The repository now has:
-
-- one umbrella skill: `event-tracking-skill`
-- seven phase-oriented subskills under `skills/`: `tracking-discover`, `tracking-group`, `tracking-live-gtm`, `tracking-schema`, `tracking-sync`, `tracking-verify`, `tracking-shopify`
-
-Use the umbrella skill for end-to-end or ambiguous requests. Use the phase skills when the user clearly wants only one part of the workflow, such as discovery, grouping, live GTM baseline review, schema review, GTM sync, preview QA, or Shopify-specific handling.
-
-See [docs/skills.md](docs/skills.md) for the full map.
-
-Root skill UI metadata now lives in [agents/openai.yaml](agents/openai.yaml).
-
-## Exported Skill Bundles
-
-If you need to package these skills outside this repository, generate self-contained bundles with:
-
-```bash
-npm run export:skills
-```
-
-That writes per-skill bundles to `dist/skill-bundles/<skill-name>/`.
-
-Each exported bundle includes:
-
-- `SKILL.md`
-- `agents/openai.yaml`
-- the `references/` files that the skill may need, including exported `architecture.md` and `skill-map.md` where relevant
-
-The exported bundles rewrite command examples to the public `event-tracking` command name. Inside this repository, keep using `./event-tracking`.
+- [docs/README.install.md](docs/README.install.md)
+- [docs/README.codex.md](docs/README.codex.md)
+- [docs/skills.md](docs/skills.md)
 
 ## Quick Start
 
-### Scenario-First (Recommended)
-
-Use scenario templates when you already know the delivery intent and want versioned run history grouped by scenario from the start.
-For a brand-new URL with no artifacts yet, `run-new-setup` is a labeled entry point, not a replacement for `analyze`; it will usually point you to `analyze` as the first execution command.
-
-```bash
-# New implementation from scratch
-./event-tracking run-new-setup ./output/example_com
-
-# Incremental update for existing tracking
-./event-tracking run-tracking-update ./output/example_com --baseline-schema ./output/example_com/schema-restore/confirmed-<hash>.json
-
-# Routine upkeep check (with fresh crawl)
-./event-tracking run-upkeep ./output/example_com --url https://example.com --baseline-schema ./output/example_com/schema-restore/confirmed-<hash>.json
-
-# Audit-only health assessment before deciding rebuild
-./event-tracking run-health-audit ./output/example_com --url https://example.com
-```
-
-Use these helpers when needed:
-
-- `./event-tracking scenario <artifact-dir> --set <scenario> --new-run [--sub-scenario ...] [--input-scope ...]` to relabel or branch a run without executing a workflow step
-- `./event-tracking scenario-check <artifact-dir>` to validate scenario-required artifacts and return the next scenario step
-- `./event-tracking scenario-transition <artifact-dir> --to <scenario> --reason "<why>"` to record scenario handoff decisions
-- `./event-tracking runs <output-root> --json` to inspect recent runs with scenario summary
-
-Scenario guardrails:
-
-- `tracking_health_audit` is audit-only. `generate-gtm`, `sync`, and `publish` are blocked by default unless explicitly forced.
-- `run-health-audit` is crawl-first and assessment-only: it generates `site-analysis.json`, candidate `event-schema.json`, and health-audit reports, but does not generate `gtm-config.json`.
-- Scenario report commands are intent-gated (for example, upkeep report commands require `upkeep`).
-- `scenario-check` is a readiness check for the current scenario contract; use `status` when you need checkpoint, warning, and gate details.
-
 ### Use It As A Skill
 
-In an agent conversation, the first turn should be an intent-first intake, not a CLI choice.
-Do not ask the user whether they want `scenario` or `analyze`; ask which of these plain-language entry paths they need:
+The intended experience is simple: tell your agent what you want in plain language.
 
-- new setup from scratch
-- update existing tracking
-- upkeep or routine review
-- health audit only
-- analyze only
-- resume an existing artifact directory
+Good requests usually include one or more of:
 
-Internal mapping:
+- the site URL
+- whether this is a new setup, update, upkeep, or audit
+- an existing artifact directory if you already have one
+- GA4 measurement ID or GTM context when you already know them
+- any scope boundary such as "stop after schema review"
 
-- full workflow intents map to scenario templates such as `run-new-setup`, `run-tracking-update`, `run-upkeep`, and `run-health-audit`
-- `analyze only` maps to `tracking-discover` / `analyze` and stops after discovery
-- an existing artifact directory maps to `status` and resume-from-current-checkpoint behavior
+### Example Prompts
 
-If you are using this in an agent environment, call it in natural language and provide the current workflow inputs:
+New setup from scratch:
 
 ```text
-Use event-tracking-skill to set up GA4 / GTM tracking for https://www.example.com.
-Use ./output as the output root directory.
+Use event-tracking-skill to plan GA4 + GTM tracking for https://www.example.com.
+Start from a fresh run and stop after the event schema is ready for review.
+```
+
+New setup with implementation context:
+
+```text
+Use event-tracking-skill to set up tracking for https://www.example.com.
+Use ./output as the output root.
 GA4 Measurement ID is G-XXXXXXXXXX.
-Google tag ID is GT-XXXXXXX if needed.
+We care most about signup, pricing, contact, and demo intent.
 ```
 
-The skill creates the run artifact directory as `<output-root>/<url-slug>` and then walks through grouping, conditional live GTM baseline review, schema review, GTM generation, sync, preview, and publish.
+Audit only:
 
-### Use It As A CLI
-
-Start with site analysis:
-
-```bash
-./event-tracking analyze https://www.example.com --output-root ./output
+```text
+Use event-tracking-skill to run a tracking health audit for https://www.example.com.
+I only want to understand the current live GTM setup and whether we should repair or rebuild.
+Do not continue into deployment work.
 ```
 
-The CLI creates the artifact directory automatically as `<output-root>/<url-slug>`, for example `./output/example_com`.
+Routine upkeep:
 
-After filling and reviewing `pageGroups` in `./output/example_com/site-analysis.json`, continue with the same artifact directory:
-
-```bash
-./event-tracking confirm-page-groups ./output/example_com/site-analysis.json
-# If site-analysis.json detected real GTM public IDs, run this before prepare-schema:
-./event-tracking analyze-live-gtm ./output/example_com/site-analysis.json
-./event-tracking prepare-schema ./output/example_com/site-analysis.json
-./event-tracking validate-schema ./output/example_com/event-schema.json --check-selectors
-./event-tracking generate-spec ./output/example_com/event-schema.json
-./event-tracking confirm-schema ./output/example_com/event-schema.json
-./event-tracking generate-gtm ./output/example_com/event-schema.json --measurement-id G-XXXXXXXXXX
-./event-tracking sync ./output/example_com/gtm-config.json
-./event-tracking preview ./output/example_com/event-schema.json --context-file ./output/example_com/gtm-context.json
-./event-tracking publish --context-file ./output/example_com/gtm-context.json --version-name "GA4 Events v1"
+```text
+Use event-tracking-skill to do an upkeep review for this existing run:
+./output/example_com
+Tell me what is still healthy, what drifted, and what needs repair.
 ```
 
-Execution environment note:
+Resume an existing artifact:
 
-- Run `analyze`, `validate-schema --check-selectors`, `preview`, and `sync` outside sandboxed environments by default.
-- `analyze`, selector checking, and `preview` launch Playwright. `sync` may need a local OAuth callback on `127.0.0.1`.
+```text
+Use event-tracking-skill to resume this artifact directory:
+./output/example_com
+Tell me the current checkpoint and continue only through schema review.
+```
 
-Important workflow note:
+Page-group review only:
 
-- `prepare-schema` requires `pageGroups` to already be filled in `site-analysis.json` and explicitly confirmed
-- Key decision checkpoints require explicit user confirmation before proceeding:
-  - `pageGroups` review/approval
-  - final `event-schema.json` approval
-  - GTM account/container/workspace target during `sync`
-  - publish decision
-- If any of the above confirmations are not explicit, stop and confirm first; do not auto-advance.
-- after grouping pages, run `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json`
-- if `site-analysis.json` detected real GTM public IDs, run `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json` before `prepare-schema`
-- for generic sites, `event-schema.json` is authored after `prepare-schema` from `schema-context.json`
-- for Shopify sites, `prepare-schema` bootstraps `event-schema.json` automatically if it does not already exist
-- `publish` now checks `tracking-health.json` before going live; use `--force` only when you intentionally want to override missing or blocking verification health
+```text
+Use event-tracking-skill to review and refine the page groups in:
+./output/example_com/site-analysis.json
+Focus on business intent, not just URL shape.
+```
 
-The full workflow used by the skill is documented in [SKILL.md](SKILL.md).
+Shopify branch:
 
-## Common Entry Points
+```text
+Use event-tracking-skill for this Shopify storefront:
+https://store.example.com
+I want the Shopify-specific tracking path, not the generic website flow.
+```
 
-You do not need to run the full flow every time.
+## How To Think About It
 
-| Intent | Start From | Minimum Inputs | Typical Command(s) |
-| --- | --- | --- | --- |
-| Find recent runs | Output root | output root | `./event-tracking runs ./output` |
-| Inspect current progress | Any artifact directory or file inside it | artifact directory or file path | `./event-tracking status <artifact-dir>` |
-| Analyze a new site | Step 1 | URL, output root | `./event-tracking analyze <url> --output-root <dir>` |
-| Review or approve page groups | Step 2 | `site-analysis.json` | update `pageGroups`, then `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json` |
-| Review the live GTM baseline before schema prep | Step 3 | approved `site-analysis.json` with detected live GTM IDs, or explicit primary GTM ID | `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json [--primary-container-id GTM-XXXXXXX]` |
-| Author or review schema | Step 4 | approved `site-analysis.json` or existing `event-schema.json` | `prepare-schema`, edit `event-schema.json`, `validate-schema`, `generate-spec`, `confirm-schema` |
-| Generate GTM config from an approved schema | Step 5 | `event-schema.json`, measurement ID | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <id>` |
-| Sync an approved GTM config | Step 6 | `gtm-config.json` | `./event-tracking sync <artifact-dir>/gtm-config.json` |
-| QA an existing GTM workspace | Step 7 | `event-schema.json`, `gtm-context.json` | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` |
-| Publish an already-verified workspace | Step 8 | `gtm-context.json`, current `tracking-health.json` | `./event-tracking publish --context-file <artifact-dir>/gtm-context.json --version-name "GA4 Events v1"` |
+This skill is best when you want the agent to act like a tracking lead, not just a command runner.
 
-Scenario-oriented reporting commands:
+A typical conversation flow is:
 
-- `./event-tracking generate-update-report <artifact-dir>/event-schema.json [--baseline-schema <file>]`
-- `./event-tracking generate-upkeep-report <artifact-dir>/event-schema.json [--baseline-schema <file>] [--health-file <file>]`
-- `./event-tracking generate-health-audit-report <artifact-dir>/event-schema.json [--live-gtm-analysis <file>]`
-- `./event-tracking start-scenario <new_setup|tracking_update|upkeep|tracking_health_audit> <artifact-dir> [--sub-scenario ...] [--input-scope ...]`
-- `./event-tracking scenario-transition <artifact-dir> --to <scenario> [--to-sub-scenario ...] [--reason ...] [--no-new-run]`
-- `./event-tracking scenario-check <artifact-dir> [--json]`
-- `./event-tracking run-new-setup <artifact-dir> [--input-scope ...]`
-- `./event-tracking run-tracking-update <artifact-dir> [--schema-file ...] [--baseline-schema ...]`
-- `./event-tracking run-upkeep <artifact-dir> [--url <site-url>] [--schema-file ...] [--baseline-schema ...] [--health-file ...]`
-- `./event-tracking run-health-audit <artifact-dir> [--url <site-url>] [--urls <partial-list>] [--gtm-id ...] [--primary-container-id ...]`
+1. inspect the site or resume an existing run
+2. group pages in a reviewable way
+3. draft or revise the event plan
+4. review what should be reused, repaired, added, or dropped
+5. continue into GTM generation and verification only when you explicitly want that
 
-Scenario gate note:
+## Where To Go Next
 
-- `tracking_health_audit` is treated as audit-only and blocks `generate-gtm`, `sync`, and `publish` unless explicitly forced.
-- Scenario reporting commands are gated by scenario intent: upkeep reports require `upkeep`, health-audit reports require `tracking_health_audit`.
-- `runs --json` now includes a `scenarioSummary` section with per-scenario counts and latest run pointers.
-
-If a user already has an artifact directory, resume from the earliest unmet prerequisite instead of restarting from `analyze`. If they only know the output root, use `./event-tracking runs <output-root>` to find recent artifact directories.
-
-## Advanced Commands
-
-- `./event-tracking scenario <artifact-dir> --set <scenario> --new-run [--sub-scenario ...] [--input-scope ...]` updates run metadata only. Use it when you want to relabel or branch work without executing a workflow step.
-- `./event-tracking sync <artifact-dir>/gtm-config.json --dry-run` prints planned GTM creates, updates, and deletes without modifying the workspace.
-- `./event-tracking sync <artifact-dir>/gtm-config.json --new-workspace` explicitly creates a new workspace instead of selecting an existing one.
-- `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json --gtm-id GTM-XXXXXXX[,GTM-YYYYYYY]` overrides or supplements the live GTM IDs detected during crawl.
-- `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json --baseline <previous-tracking-health.json>` compares the new preview health report against an older baseline.
-- `./event-tracking auth-clear --context-file <artifact-dir>/gtm-context.json` clears the URL-scoped OAuth cache for one run. Use `--output-root <output-root>` to clear all cached auth under an output root.
-
-## Required Inputs
-
-Before running the full workflow, prepare:
-
-- target website URL
-- output root directory for generated artifacts
-- GA4 Measurement ID
-- optional Google tag ID
-
-The artifact directory is required for every downstream step and is derived as `<output-root>/<url-slug>`.
-
-## Workflow
-
-The current workflow mixes agent-led review steps with CLI execution steps.
-
-| Step | Owner | What It Does | Command / Output |
-| --- | --- | --- | --- |
-| Analyze | CLI | Crawls the site and captures pages, shared UI, warnings, detected events, and platform signals | `./event-tracking analyze <url> --output-root <output-root>` -> `site-analysis.json` |
-| Page Grouping | Agent or user | Fills `pageGroups` in `site-analysis.json` by business purpose before schema preparation | updated `site-analysis.json` |
-| Page Group Confirmation | User + CLI | Reviews the current page groups and records explicit approval for the current `pageGroups` snapshot | `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json` -> updated `site-analysis.json` |
-| Live GTM Baseline Audit | CLI | Reviews the site's real public GTM runtime before schema generation when live GTM container IDs were detected during analysis | `./event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json` -> `live-gtm-analysis.json`, `live-gtm-review.md` |
-| Prepare Schema Context | CLI | Compresses grouped analysis plus any reviewed live GTM baseline for schema authoring and bootstraps Shopify artifacts when needed | `./event-tracking prepare-schema <artifact-dir>/site-analysis.json` -> `schema-context.json`, Shopify bootstrap files |
-| Schema Authoring And Review | Agent or user + CLI validation | Creates or refines `event-schema.json`, validates selectors, generates a readable spec, emits a live-baseline comparison report when available, records schema approval, and keeps restore/audit history | `validate-schema`, `generate-spec`, `confirm-schema` -> `event-schema.json`, `event-spec.md`, `tracking-plan-comparison.md` (when live baseline exists), `schema-decisions.jsonl`, `schema-restore/`, `workflow-state.json` |
-| GTM Generation | CLI | Converts the approved schema into GTM-ready tags, triggers, and variables | `./event-tracking generate-gtm <artifact-dir>/event-schema.json --measurement-id <G-XXXXXXXXXX>` -> `gtm-config.json` |
-| GTM Sync | CLI | Authenticates with Google, requires explicit account/container/workspace selection, and syncs the generated configuration | `./event-tracking sync <artifact-dir>/gtm-config.json` -> `gtm-context.json`, `credentials.json` |
-| Verification | CLI | Runs GTM preview for generic sites, records unexpected fired events, writes tracking health JSON plus a human-readable health report and timestamped health history, or writes a Shopify manual verification guide instead | `./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json` -> `preview-report.md`, `preview-result.json`, `tracking-health.json`, `tracking-health-report.md`, `tracking-health-history/` |
-| Publish | CLI | Publishes the validated GTM workspace as a new container version, but only after current tracking health is present and non-blocking unless the user explicitly passes `--force` | `./event-tracking publish --context-file <artifact-dir>/gtm-context.json --version-name "GA4 Events v1"` |
-
-## Generic vs Shopify Branch
-
-After `analyze`, the run still shares grouping, page-group approval, and live GTM baseline review when applicable before the generic and Shopify-specific schema behavior diverges:
-
-- `generic`: follow the standard schema authoring, GTM sync, and automated preview flow
-- `shopify`: use Shopify bootstrap artifacts after the shared early stages, generate a Shopify custom pixel after `sync`, and use manual post-install verification instead of the normal automated browser preview
-
-Shopify-specific behavior today:
-
-- `prepare-schema` writes `shopify-schema-template.json` and `shopify-bootstrap-review.md`
-- `prepare-schema` initializes `event-schema.json` automatically when it does not exist yet
-- `sync` generates `shopify-custom-pixel.js` and `shopify-install.md`
-- `preview` skips automated browser validation and writes manual Shopify verification guidance instead
-
-For the detailed Shopify branch, see [references/shopify-workflow.md](references/shopify-workflow.md).
-
-## Main Artifacts
-
-Artifacts now follow a site-level directory with versioned runs:
-
-- current files under `<output-root>/<url-slug>/`
-- run snapshots under `<output-root>/<url-slug>/versions/<run-id>/`
-- scenario handoff audit in `scenario-transitions.jsonl`
-
-For the complete and always-current artifact list (including scenario deliverables), see [references/output-contract.md](references/output-contract.md).
-
-## GTM Selection Rule
-
-During `sync`, GTM target selection is a required user-confirmation step.
-
-- never auto-select the GTM account, container, or workspace for the user
-- always show the candidate list and require explicit user confirmation at each selection step
-- a matching domain name or a likely production-looking option is not enough to justify auto-selection
-- only skip a selection step when the user has already provided the exact GTM ID for that step
-- if no existing workspaces are available, `sync` asks before creating a new default workspace; `--new-workspace` makes that choice explicit up front
-
-## Important Notes
-
-- prefer `--output-root` for `analyze`; `--output-dir` is only a deprecated exact artifact-directory override
-- `analyze` supports partial mode with `--urls` for specific same-domain pages
-- `analyze` also supports `--storefront-password` for password-protected Shopify dev stores
-- when `site-analysis.json` contains real GTM public IDs, `prepare-schema` requires `analyze-live-gtm` first so schema design can compare against the current live baseline
-- `generate-gtm` will surface any custom dimensions that must be registered in GA4 before you continue
-- `generate-gtm` now requires a current schema confirmation; use `./event-tracking confirm-schema <artifact-dir>/event-schema.json` after schema review
-- selector-based events may still need review when the site uses unstable or highly dynamic markup
-- `preview` now scores only the schema events that are actually verified in automation, persists unexpected fired events, and keeps timestamped health history snapshots
-- `publish` now blocks when preview health is missing, still manual-only, or contains blockers; use `--force` only for an intentional override
-- Shopify validation differs from the standard automated GTM preview flow
-
-## Maintenance
-
-- `npm test` rebuilds the CLI and runs the standalone automated workflow-state and gate tests.
-- `npm run doctor` checks Node, the built CLI artifact, the repo-local wrapper, and the Playwright Chromium install.
-- `npm run export:skills` writes self-contained skill bundles to `dist/skill-bundles/` for packaging outside the repo.
-- `npm run install:skills` installs the umbrella bundle into `$CODEX_HOME/skills` or `~/.codex/skills`, with optional `--target-dir`, `--skill`, and `--with-phases` controls.
-- copy-mode installed bundles can now check GitHub for a newer `VERSION` and self-update the selected installed bundle set.
-- `npm run install:skills -- --mode link` links the selected exported bundles into the skills directory instead of copying them, which is useful during local iteration.
-- `npm run check` rebuilds the CLI, runs automated tests, smoke-tests `./event-tracking --help`, exports and installs skill bundles into a temp directory, and enforces the public command surface in docs.
+- Installation details: [docs/README.install.md](docs/README.install.md)
+- Codex-specific install notes: [docs/README.codex.md](docs/README.codex.md)
+- Skill family map: [docs/skills.md](docs/skills.md)
+- Agent-facing workflow contract: [SKILL.md](SKILL.md)
+- CLI and maintainer workflow: [DEVELOPING.md](DEVELOPING.md)
 
 ## Product Boundary
 
-- the core workflow runs locally
-- it does not require JTracking product authorization
-- GTM sync is handled through Google OAuth
-- generic sites are validated through GTM Preview Mode
-- Shopify stores use custom pixel artifacts plus manual validation after installation
+- the workflow runs locally
+- GTM sync uses Google OAuth
+- generic sites use automated preview verification
+- Shopify uses the Shopify-specific branch and manual post-install validation
 
 ## Need A More Advanced Setup?
 
@@ -421,10 +172,10 @@ This skill reflects the implementation workflow behind [JTracking](https://www.j
 
 If you need a more advanced setup, JTracking also supports:
 
-- richer event design based on business scenarios
-- server-side tracking and custom loader support
-- more channel connections such as GA4, Meta, Google Ads, TikTok, and Klaviyo
-- longer-term, unified tracking management
+- richer tracking design based on business scenarios
+- server-side tracking and custom loaders
+- more destination and ad-platform integrations
+- longer-term tracking operations and maintenance
 
 ## License
 

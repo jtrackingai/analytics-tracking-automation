@@ -2,100 +2,146 @@
 
 Install-facing skill bundles keep the matching runtime reference at [../references/skill-map.md](../references/skill-map.md).
 
-This repository now has an umbrella skill plus a small phase-oriented skill family.
+This page is user-facing. Its job is to help you understand which skill to invoke, not to restate the full internal workflow contract.
+
+## Start Here
+
+Most users should start with the umbrella skill:
+
+- `event-tracking-skill`
+
+Use it when:
+
+- you want end-to-end help
+- you are not sure which phase to start from
+- you want to work through the flow in conversation instead of picking commands yourself
+
+The umbrella skill owns first-turn conversational intake for chat entry points. It should interpret user intent in plain language before choosing a scenario or phase.
 
 ## Skill Map
 
-| Skill | Role | Use When | Typical Stop Point |
-| --- | --- | --- | --- |
-| `event-tracking-skill` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |
-| `tracking-discover` | analysis bootstrap | the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory | `site-analysis.json` |
-| `tracking-group` | page grouping review | the user wants page-group authoring, grouping adjustments, or page-group approval only | confirmed `site-analysis.json` |
-| `tracking-live-gtm` | live GTM baseline audit | the user wants to inspect the real public GTM runtime before schema generation or compare multiple live GTM containers | `live-gtm-analysis.json` and `live-gtm-review.md` |
-| `tracking-schema` | schema authoring and approval | the user wants event design, selector validation, schema review, or spec generation | confirmed `event-schema.json`, optional `event-spec.md`, and schema audit/restore artifacts |
-| `tracking-sync` | GTM config generation and sync | the user wants GTM-ready config, workspace sync, or container selection | `gtm-config.json` or `gtm-context.json` |
-| `tracking-verify` | preview QA and go-live handoff | the user wants preview verification, QA interpretation, or a publish-ready checkpoint | `preview-report.md`, `tracking-health.json`, or publish outcome |
-| `tracking-shopify` | Shopify-specific overlay | the platform is Shopify or the user explicitly wants the Shopify branch behavior | Shopify bootstrap review, custom pixel, install guide, or manual verification plan |
+| Skill | Best For | What The User Usually Says |
+| --- | --- | --- |
+| `event-tracking-skill` | end-to-end routing | "Help me set up or review tracking for this site" |
+| `tracking-discover` | site inspection and bootstrap | "Analyze this site first" |
+| `tracking-group` | page-group review | "Group these pages by business meaning" |
+| `tracking-live-gtm` | live GTM baseline review | "Show me what is already live in GTM" |
+| `tracking-schema` | event-plan design and approval | "Help me design or review the event schema" |
+| `tracking-sync` | GTM generation and sync | "Generate or sync the GTM setup" |
+| `tracking-verify` | preview QA and release readiness | "Check whether tracking is healthy before publish" |
+| `tracking-shopify` | Shopify-specific branch | "This is a Shopify storefront" |
+
+## Recommended Default
+
+- If the request is broad or ambiguous, use `event-tracking-skill`.
+- If the user already has a specific artifact such as `site-analysis.json` or `event-schema.json`, move directly to the matching phase skill.
+- If the platform is Shopify, keep discovery and grouping shared, then switch to `tracking-shopify` for the Shopify-specific branch.
+
+## What Each Skill Helps With
+
+### `event-tracking-skill`
+
+Use this when you want the agent to figure out the right starting point and keep the conversation moving.
+
+Typical user asks:
+
+- "Set up GA4 + GTM tracking for this site."
+- "Resume this existing artifact directory."
+- "I need an upkeep review."
+- "Run a health audit and tell me if we should repair or rebuild."
+
+### `tracking-discover`
+
+Use this when the user wants analysis only.
+
+Typical outcomes:
+
+- crawl coverage
+- platform detection
+- detected GTM IDs
+- a fresh artifact directory
+
+### `tracking-group`
+
+Use this when the user wants page groups reviewed in business language.
+
+Default closeout should stay compact and reviewable:
+
+- summarize total groups
+- explain the grouping logic
+- show a compact table
+- do not dump raw URL lists unless asked
+
+### `tracking-live-gtm`
+
+Use this when the user wants to understand the real live GTM baseline before schema work starts.
+
+For `tracking_health_audit`, the closeout should clearly separate:
+
+- runtime-detected live definitions
+- formal preview-verified automation evidence
+
+### `tracking-schema`
+
+Use this when the user wants event design or event-plan review.
+
+Default review structure:
+
+- `Event Table`
+- `Common Properties`
+- `Event-specific Properties`
+
+That keeps the chat summary decision-ready instead of turning it into a wide parameter dump.
+
+### `tracking-sync`
+
+Use this when the user is ready to move an approved plan into GTM.
+
+Keep the closeout focused on:
+
+- what was generated or synced
+- what still needs confirmation
+- what manual actions remain
+
+### `tracking-verify`
+
+Use this when the user wants preview QA, health interpretation, or publish readiness.
+
+Default closeout should be answer-first:
+
+- current verdict
+- blockers
+- unexpected events
+- next action
+
+### `tracking-shopify`
+
+Use this when the run is clearly on the Shopify branch.
+
+This skill should keep Shopify-specific expectations explicit:
+
+- custom pixel outputs
+- install guidance
+- manual post-install verification
 
 ## Design Rules
 
 - The root skill remains the stable entry point for environments that only load one skill.
-- The root skill owns first-turn conversational intake for chat entry points and should classify the request in plain-language intent terms before choosing a scenario template or phase skill.
 - The root skill should stay an umbrella router and shared contract, not a long phase-by-phase runbook.
 - The root skill should not ask the user to choose between internal command names such as `scenario` and `analyze`.
 - Root and phase closeouts should default to answer-first summaries, with files and artifact references listed only after the human-readable summary.
-- Phase skills are intentionally thin. They should route to a bounded part of the workflow and stop when that phase is complete.
+- Phase skills are intentionally thin. They should help with one bounded part of the workflow and stop when that phase is complete.
 - Shared mechanics live in the CLI, artifact contract, and root references. Phase skills should not fork those contracts.
-- Shopify keeps discovery and grouping shared, then takes ownership of the Shopify-specific schema, sync, install, and verification branch behavior.
-
-## Boundaries
-
-`tracking-discover` owns:
-
-- `analyze`
-- bootstrap artifact directory
-- crawl summary and platform detection
-
-`tracking-group` owns:
-
-- editing `pageGroups`
-- page-group review
-- `confirm-page-groups`
-
-`tracking-live-gtm` owns:
-
-- `analyze-live-gtm`
-- public live GTM runtime comparison
-- primary comparison container selection
-
-`tracking-schema` owns:
-
-- `prepare-schema`
-- schema authoring and validation
-- `generate-spec`
-- `confirm-schema`
-
-`tracking-sync` owns:
-
-- `generate-gtm`
-- custom-dimension gate
-- `sync`
-
-`tracking-verify` owns:
-
-- `preview`
-- preview report interpretation
-- optional publish transition when the user explicitly wants to go live
-
-`tracking-shopify` modifies:
-
-- schema bootstrap expectations
-- sync outputs
-- verification path
-- post-branch handoff rules once the platform is confirmed as Shopify
 
 ## Packaging Note
 
 Inside this repository, the skill family lives under `skills/`.
 
-The root skill is still the canonical umbrella contract. The phase skills are repo-local building blocks for more precise routing and future packaging as separate installed skills.
+`skills/manifest.json` remains the source-of-truth inventory for the shipped skill family.
 
-`skills/manifest.json` is the source-of-truth inventory for the shipped skill family. Export and check tooling derive the expected bundle set from that manifest.
+Each skill also has minimal UI metadata in `agents/openai.yaml`.
 
-Each skill now also has minimal UI metadata in `agents/openai.yaml`.
+If you need installation or export details, use:
 
-To export self-contained bundles for installation or distribution outside this repository, run:
-
-```bash
-npm run export:skills
-```
-
-That generates `dist/skill-bundles/<skill-name>/`, where each bundle carries its own `SKILL.md`, `agents/openai.yaml`, and copied `references/` tree. Exported architecture and skill-map material is written into `references/` so the installed bundle stays close to the native skill shape used by agent runtimes.
-
-To install those bundles into a real agent skills directory, run:
-
-```bash
-npm run install:skills
-```
-
-That installs the umbrella skill into the installer's default target, unless `--target-dir` is provided. Add `--with-phases` when you want the full phase-oriented family installed together. See [README.install.md](README.install.md) for the shared install flow and [README.codex.md](README.codex.md) for Codex-specific defaults.
+- [README.install.md](README.install.md)
+- [README.codex.md](README.codex.md)
