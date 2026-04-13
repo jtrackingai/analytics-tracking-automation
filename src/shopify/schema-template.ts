@@ -1,7 +1,7 @@
 import { EventSchema, GA4Event, GA4Parameter } from '../generator/event-schema';
 import { InteractiveElement, SiteAnalysis } from '../crawler/page-analyzer';
 
-type InferredStorefrontEventName = 'login_click' | 'signup_click' | 'get_started_click' | 'search_submit';
+type InferredStorefrontEventName = 'login_click' | 'signup_click' | 'get_started_click' | 'view_search_results';
 type ShopifyBootstrapRecommendation = 'keep' | 'review' | 'remove';
 
 export interface ShopifyBootstrapReviewItem {
@@ -200,8 +200,8 @@ function inferSearchFormCandidates(analysis: SiteAnalysis): InferredStorefrontCa
         (form.selector === 'form' ? -3 : 0);
 
       candidates.push({
-        eventName: 'search_submit',
-        description: 'User submits a storefront search.',
+        eventName: 'view_search_results',
+        description: 'User views storefront search results.',
         priority: 'medium',
         triggerType: 'custom',
         selector: form.selector,
@@ -268,7 +268,7 @@ function inferStorefrontSelectorEvents(analysis: SiteAnalysis): {
   }
 
   const globalPageCounts = new Map<InferredStorefrontEventName, number>();
-  for (const eventName of ['login_click', 'signup_click', 'get_started_click', 'search_submit'] as InferredStorefrontEventName[]) {
+  for (const eventName of ['login_click', 'signup_click', 'get_started_click', 'view_search_results'] as InferredStorefrontEventName[]) {
     globalPageCounts.set(
       eventName,
       new Set(candidates.filter(candidate => candidate.eventName === eventName).map(candidate => candidate.pageUrl)).size,
@@ -277,7 +277,7 @@ function inferStorefrontSelectorEvents(analysis: SiteAnalysis): {
 
   const inferredEvents: GA4Event[] = [];
   const reviewItems: ShopifyBootstrapReviewItem[] = [];
-  for (const eventName of ['login_click', 'signup_click', 'get_started_click', 'search_submit'] as InferredStorefrontEventName[]) {
+  for (const eventName of ['login_click', 'signup_click', 'get_started_click', 'view_search_results'] as InferredStorefrontEventName[]) {
     const matching = candidates.filter(candidate => candidate.eventName === eventName);
     if (matching.length === 0) continue;
 
@@ -303,10 +303,10 @@ function inferStorefrontSelectorEvents(analysis: SiteAnalysis): {
     let recommendation: ShopifyBootstrapRecommendation = 'review';
     let recommendationReason = 'This inferred storefront event should be checked against the real UX before publishing.';
 
-    if (eventName !== 'search_submit' && isWeakSelector(selected.selector)) {
+    if (eventName !== 'view_search_results' && isWeakSelector(selected.selector)) {
       recommendation = 'remove';
       recommendationReason = 'The inferred selector is too generic and is likely to match multiple unrelated elements.';
-    } else if (eventName === 'search_submit' && selected.label.toLowerCase().includes('/search')) {
+    } else if (eventName === 'view_search_results' && selected.label.toLowerCase().includes('/search')) {
       recommendation = 'keep';
       recommendationReason = 'This event is backed by a visible search form with an explicit `/search` action and can be bridged from Shopify standard search events.';
     } else if ((eventName === 'login_click' || eventName === 'signup_click') && /\/account\/(login|register)/i.test(selected.href || '')) {
@@ -344,8 +344,8 @@ function inferStorefrontSelectorEvents(analysis: SiteAnalysis): {
       recommendation,
       recommendationReason,
       rationale:
-        eventName === 'search_submit'
-          ? `Detected a visible search form candidate${selected.label ? ` with action "${selected.label}"` : ''} on ${selected.pageUrl}. The published schema will bridge Shopify \`search_submitted\` into GA4 \`search_submit\`.`
+        eventName === 'view_search_results'
+          ? `Detected a visible search form candidate${selected.label ? ` with action "${selected.label}"` : ''} on ${selected.pageUrl}. The published schema will bridge Shopify \`search_submitted\` into GA4 \`view_search_results\`.`
           : `Detected a high-confidence storefront CTA candidate${selected.label ? ` with label "${selected.label}"` : ''} on ${selected.pageUrl}.`,
     });
   }

@@ -60,8 +60,8 @@ const SUPPORTED_MAPPINGS: ShopifyEventMapping[] = [
   },
   {
     shopifyEventName: 'search_submitted',
-    ga4EventName: 'search_submit',
-    description: 'Storefront search submitted',
+    ga4EventName: 'view_search_results',
+    description: 'Storefront search results view',
   },
 ];
 
@@ -452,7 +452,7 @@ var handlers = {
     var searchResult = event && event.data && event.data.searchResult;
     var query = searchResult && searchResult.query;
     var productVariants = Array.isArray(searchResult && searchResult.productVariants) ? searchResult.productVariants : [];
-    pushShopifyEvent('search_submit', 'search_submitted', event, compactObject({
+    pushShopifyEvent('view_search_results', 'search_submitted', event, compactObject({
       search_term: query,
       items: buildItemsFromVariants(productVariants, {
         item_list_name: 'Search Results',
@@ -489,7 +489,7 @@ ${explicitSubscriptions}
     '',
     '### Mode A — Customer Events Custom Pixel Only',
     '',
-    '- Recommended when you only need Shopify standard ecommerce events such as `view_item`, `add_to_cart`, `begin_checkout`, `purchase`, and `search_submit`.',
+    '- Recommended when you only need Shopify standard ecommerce events such as `view_item`, `add_to_cart`, `begin_checkout`, `purchase`, and `view_search_results`.',
     '- In this mode, GTM runs inside Shopify Customer Events sandbox, not in the storefront theme DOM.',
     '- If Tag Assistant or another preview tool says `Google Tag / GTM container not found` on the storefront page, that is expected in this mode.',
     '',
@@ -497,6 +497,8 @@ ${explicitSubscriptions}
     '',
     '- Use this in addition to Mode A when you want GTM to be detectable on storefront pages, or when you need theme-level pageview / click / form triggers.',
     '- Keep the Customer Events custom pixel installed even if you also install GTM in the theme. The theme snippet does not replace Shopify checkout and standard-event bridging.',
+    '- Do not remove the GTM bootstrap block from `shopify-custom-pixel.js` when using Mode B. Shopify Customer Events and `theme.liquid` run in separate JavaScript contexts, so the custom pixel still needs its own GTM loader to deliver Shopify standard events into GTM.',
+    '- If you use the same GTM container in both places, review storefront-level hits such as automatic `page_view` to make sure you are not counting them twice.',
     '',
     '## Install Steps — Mode A',
     '',
@@ -509,6 +511,7 @@ ${explicitSubscriptions}
     '',
     '## Optional Theme Install — Mode B',
     '',
+    '0. Leave `shopify-custom-pixel.js` unchanged. Do not delete the top-level GTM loader block from the custom pixel.',
     '1. Open Shopify Admin -> `Online Store -> Themes`.',
     '2. On the active theme, click `...` -> `Edit code`.',
     '3. Open `layout/theme.liquid`.',
@@ -547,7 +550,8 @@ ${explicitSubscriptions}
     '## Notes',
     '',
     '- Shopify custom pixels run in a sandboxed environment. Prefer dataLayer-driven custom event triggers over DOM click triggers for ecommerce events.',
-    '- If your schema includes Shopify ecommerce events, use `triggerType: "custom"` with GA4 event names such as `add_to_cart`, `begin_checkout`, `purchase`, and `search_submit`.',
+    '- The GTM bootstrap snippet can appear in both the custom pixel and `theme.liquid` without being the same installation point. They run in different execution contexts.',
+    '- If your schema includes Shopify ecommerce events, use `triggerType: "custom"` with GA4 event names such as `add_to_cart`, `begin_checkout`, `purchase`, and `view_search_results`.',
     '- Theme GTM installation helps storefront preview and DOM-based triggers, but checkout-related Shopify standard events should still come from the Customer Events custom pixel bridge.',
   ].join('\n');
 
