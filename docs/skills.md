@@ -150,4 +150,3 @@ Each skill also has minimal UI metadata in `agents/openai.yaml`.
 If you need installation or export details, use:
 
 - [README.install.md](README.install.md)
-- [README.codex.md](README.codex.md)

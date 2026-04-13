@@ -61,10 +61,9 @@ If you do not want to clone the repository, install the root skill directly:
 npx skills add jtrackingai/event-tracking-skill
 ```
 
-For advanced install options, exported skill bundles, and Codex-specific notes:
+For advanced install options and exported skill bundles:
 
 - [docs/README.install.md](docs/README.install.md)
-- [docs/README.codex.md](docs/README.codex.md)
 - [docs/skills.md](docs/skills.md)
 
 ## Quick Start
@@ -154,7 +153,6 @@ A typical conversation flow is:
 ## Where To Go Next
 
 - Installation details: [docs/README.install.md](docs/README.install.md)
-- Codex-specific install notes: [docs/README.codex.md](docs/README.codex.md)
 - Skill family map: [docs/skills.md](docs/skills.md)
 - Agent-facing workflow contract: [SKILL.md](SKILL.md)
 - CLI and maintainer workflow: [DEVELOPING.md](DEVELOPING.md)

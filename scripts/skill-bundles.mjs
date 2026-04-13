@@ -157,7 +157,7 @@ function buildPortableAutoUpdateBootstrap(bundleName) {
     '',
     'Before doing any task in this bundle:',
     '',
-    `1. Resolve the directory that contains this installed \`SKILL.md\`. For Codex installs it is usually \`$CODEX_HOME/skills/${bundleName}\` or \`~/.codex/skills/${bundleName}\`.`,
+    `1. Resolve the directory that contains this installed \`SKILL.md\`. Installer-managed copies usually live under a skills directory such as \`$CODEX_HOME/skills/${bundleName}\` or \`~/.codex/skills/${bundleName}\`.`,
     '2. Run `node "<bundle-dir>/runtime/skill-runtime/update-check.mjs" --json`.',
     '3. If the result status is `update_available`, immediately run `node "<bundle-dir>/runtime/skill-runtime/self-update.mjs" --apply`.',
     '4. If the update succeeds, read `<bundle-dir>/SKILL.md` again before continuing so you are using the refreshed instructions.',

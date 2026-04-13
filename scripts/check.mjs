@@ -130,8 +130,6 @@ assertFileExists('VERSION', 'Keep a canonical skill-family version file for inst
 assertFileExists('ARCHITECTURE.md', 'Keep a dedicated system-design document in the repo root.');
 assertFileExists('DEVELOPING.md', 'Keep a dedicated maintainer guide in the repo root.');
 assertFileExists('docs/README.install.md', 'Keep a shared agent-install guide for portable skill installation.');
-assertFileExists('docs/README.codex.md', 'Keep a Codex-specific install and update guide for the exported skill family.');
-assertFileExists('.codex/INSTALL.md', 'Keep a bootstrap install note for Codex users who fetch this repository into a skill environment.');
 assertFileExists('docs/skills.md', 'Keep a dedicated skill map when the repo exposes a skill family.');
 assertFileExists('references/architecture.md', 'Keep an install-facing architecture reference in source so exported bundles can ship it unchanged.');
 assertFileExists('references/skill-map.md', 'Keep an install-facing skill-map reference in source so exported bundles can ship it unchanged.');

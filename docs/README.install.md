@@ -2,7 +2,7 @@
 
 Use this guide when you want to install the exported skill bundles into a local agent skills directory.
 
-This is the shared installation path across agent runtimes. Platform-specific notes such as Codex defaults should live in thin supplement pages on top of this guide.
+This is the shared installation path across agent runtimes.
 
 ## Recommended Path
 
@@ -164,7 +164,3 @@ If you used `--with-phases`, the installed directory should also contain:
 - `tracking-sync`
 - `tracking-verify`
 - `tracking-shopify`
-
-## Platform Notes
-
-- [README.codex.md](README.codex.md) for Codex-specific defaults, paths, and troubleshooting
