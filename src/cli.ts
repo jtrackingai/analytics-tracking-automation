@@ -99,6 +99,10 @@ import {
   renderTrackingPlanSummary,
   renderUpkeepSummary,
 } from './reporter/summary-presenter';
+import {
+  captureCommandCompleted,
+  captureTelemetry,
+} from './telemetry';
 
 const program = new Command();
 
@@ -247,6 +251,14 @@ function normalizeTrackingId(id: string | undefined): string | undefined {
   const trimmed = id?.trim();
   if (!trimmed) return undefined;
   return trimmed.toUpperCase();
+}
+
+function hostnameFromUrl(value: string): string | undefined {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function parseScenario(input: string | undefined, fallback: WorkflowScenario): WorkflowScenario {
@@ -1436,6 +1448,7 @@ program
     subScenario?: string;
     inputScope?: string;
   }) => {
+    const commandStartedAt = Date.now();
     const isPartial = !!opts.urls;
     const partialUrls = opts.urls
       ? opts.urls.split(',').map(u => u.trim()).filter(Boolean)
@@ -1510,6 +1523,26 @@ program
     if (workflowState.nextCommand) {
       console.log(`   Next step: ${workflowState.nextCommand}`);
     }
+
+    await captureTelemetry('site_analyzed', {
+      command_name: 'analyze',
+      scenario,
+      checkpoint: workflowState.currentCheckpoint,
+      site_hostname: hostnameFromUrl(siteAnalysis.rootUrl),
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      run_mode: isPartial ? 'partial' : 'full',
+      page_count: siteAnalysis.pages.length,
+      discovered_url_count: siteAnalysis.discoveredUrls.length,
+      skipped_url_count: siteAnalysis.skippedUrls.length,
+      platform_type: siteAnalysis.platform.type,
+      gtm_detected: (siteAnalysis.gtmPublicIds || []).length > 0,
+      warning_count: siteAnalysis.crawlWarnings.length,
+    });
+    await captureCommandCompleted('analyze', commandStartedAt, 'success', {
+      scenario,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 // STEP 1.5: Confirm page groups before schema preparation
@@ -1753,6 +1786,7 @@ program
   .description('Confirm the current event-schema.json before GTM config generation')
   .option('--yes', 'Skip confirmation prompt and mark the current schema as approved')
   .action(async (schemaFile: string, opts: { yes?: boolean }) => {
+    const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(schemaFile);
     const schema = readJsonFile<EventSchema>(resolvedFile);
     const issues = validateEventSchema(schema);
@@ -1787,6 +1821,10 @@ program
       existingState.schemaReview.confirmedHash === currentHash
     ) {
       console.log(`\nℹ️  This schema is already confirmed${existingState.schemaReview.confirmedAt ? ` (${existingState.schemaReview.confirmedAt})` : ''}.`);
+      await captureCommandCompleted('confirm-schema', commandStartedAt, 'success', {
+        scenario: existingState.scenario,
+        checkpoint: existingState.currentCheckpoint,
+      });
       return;
     }
 
@@ -1794,6 +1832,10 @@ program
       const answer = await prompt('\nConfirm this schema for GTM generation? (yes/no): ');
       if (answer.toLowerCase() !== 'yes') {
         console.log('Schema confirmation cancelled.');
+        await captureCommandCompleted('confirm-schema', commandStartedAt, 'cancelled', {
+          scenario: existingState.scenario,
+          checkpoint: existingState.currentCheckpoint,
+        });
         return;
       }
     }
@@ -1830,6 +1872,25 @@ program
       console.log(`   Recommended next step: ${formatPublicCommand(['generate-spec', resolvedFile])}`);
     }
     console.log(`   Next step: ${formatPublicCommand(['generate-gtm', resolvedFile, '--measurement-id', '<G-XXXXXXXXXX>'])}`);
+
+    await captureTelemetry('schema_confirmed', {
+      command_name: 'confirm-schema',
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      schema_event_count: schema.events.length,
+      custom_dimension_count: quota.customDimensions,
+      schema_added_count: schemaAudit.entry.summary.added.length,
+      schema_changed_count: schemaAudit.entry.summary.changed.length,
+      schema_removed_count: schemaAudit.entry.summary.removed.length,
+      validation_error_count: errs.length,
+      validation_warning_count: warns.length,
+    });
+    await captureCommandCompleted('confirm-schema', commandStartedAt, 'success', {
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 // STEP 2.1: Prepare compressed context for AI event schema generation
@@ -2091,6 +2152,7 @@ program
     dryRun?: boolean;
     forceScenario?: boolean;
   }) => {
+    const commandStartedAt = Date.now();
     const config = readJsonFile<GTMContainerExport>(configFile);
     const artifactDir = resolveArtifactDirFromFile(configFile);
     const activeScenario = getScenarioFromArtifact(artifactDir);
@@ -2176,6 +2238,22 @@ program
       printSection('Variables', plan.variables);
       printSection('Triggers', plan.triggers);
       printSection('Tags', plan.tags);
+      await captureTelemetry('gtm_sync_completed', {
+        command_name: 'sync',
+        scenario: activeScenario,
+        status: 'success',
+        duration_ms: Date.now() - commandStartedAt,
+        dry_run: true,
+        new_workspace: !!opts.newWorkspace,
+        tags_created: plan.tags.create.length,
+        tags_updated: plan.tags.update.length,
+        tags_deleted: plan.tags.delete.length,
+        sync_error_count: 0,
+      });
+      await captureCommandCompleted('sync', commandStartedAt, 'success', {
+        scenario: activeScenario,
+        dry_run: true,
+      });
       return;
     }
 
@@ -2206,7 +2284,25 @@ program
       stage: 'sync',
     });
     console.log(`\n   GTM context saved: ${contextFile}`);
-    refreshAndIndexWorkflowState(artifactDir);
+    const workflowState = refreshAndIndexWorkflowState(artifactDir);
+
+    await captureTelemetry('gtm_sync_completed', {
+      command_name: 'sync',
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      dry_run: false,
+      new_workspace: !!opts.newWorkspace,
+      tags_created: syncResult.tagsCreated,
+      tags_updated: syncResult.tagsUpdated,
+      tags_deleted: syncResult.tagsDeleted,
+      sync_error_count: syncResult.errors.length,
+    });
+    await captureCommandCompleted('sync', commandStartedAt, 'success', {
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+    });
 
     const siteAnalysis = tryReadJsonFile<SiteAnalysis>(path.join(artifactDir, 'site-analysis.json'));
     if (siteAnalysis && isShopifyPlatform(siteAnalysis.platform)) {
@@ -2263,6 +2359,7 @@ program
     publicId?: string;
     baseline?: string;
   }) => {
+    const commandStartedAt = Date.now();
     const schema = readJsonFile<EventSchema>(schemaFile);
 
     // Load context
@@ -2313,7 +2410,7 @@ program
       snapshotArtifactFile({ artifactDir: dir, file: healthFile, stage: 'preview_manual' });
       snapshotArtifactFile({ artifactDir: dir, file: healthReportFile, stage: 'preview_manual' });
       snapshotArtifactFile({ artifactDir: dir, file: historyFile, stage: 'preview_manual' });
-      refreshAndIndexWorkflowState(dir, {
+      const workflowState = refreshAndIndexWorkflowState(dir, {
         verification: {
           status: 'completed',
           verifiedAt: new Date().toISOString(),
@@ -2327,6 +2424,24 @@ program
       console.log(`   Tracking health report saved to: ${healthReportFile}`);
       console.log(`   Tracking health history saved to: ${historyFile}`);
       console.log(`\n   Next step: install the Shopify custom pixel, publish the GTM workspace, and validate in GA4 Realtime.`);
+      await captureTelemetry('preview_completed', {
+        command_name: 'preview',
+        scenario: workflowState.scenario,
+        checkpoint: workflowState.currentCheckpoint,
+        status: 'success',
+        duration_ms: Date.now() - commandStartedAt,
+        total_expected: schema.events.length,
+        total_fired: 0,
+        health_grade: manualTrackingHealth.grade,
+        health_score: manualTrackingHealth.score,
+        blocker_count: manualTrackingHealth.blockers.length,
+        unexpected_event_count: manualTrackingHealth.unexpectedEventNames.length,
+        manual_mode: true,
+      });
+      await captureCommandCompleted('preview', commandStartedAt, 'success', {
+        scenario: workflowState.scenario,
+        checkpoint: workflowState.currentCheckpoint,
+      });
       return;
     }
 
@@ -2358,12 +2473,18 @@ program
         if (gtmCheck.siteLoadsGTM) {
           console.log(`   Site currently uses: ${gtmCheck.loadedContainerIds.join(', ')}`);
         }
+        await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
+          status: 'cancelled',
+        });
         return;
       } else if (choice === '2') {
         injectGTM = true;
         console.log(`\n💉 Will inject ${gtmPublicId} during preview.`);
       } else {
         console.log(`Invalid choice. Exiting.`);
+        await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
+          status: 'cancelled',
+        });
         return;
       }
     }
@@ -2409,7 +2530,7 @@ program
     snapshotArtifactFile({ artifactDir: dir, file: healthFile, stage: 'preview' });
     snapshotArtifactFile({ artifactDir: dir, file: healthReportFile, stage: 'preview' });
     snapshotArtifactFile({ artifactDir: dir, file: historyFile, stage: 'preview' });
-    refreshAndIndexWorkflowState(dir, {
+    const workflowState = refreshAndIndexWorkflowState(dir, {
       verification: {
         status: 'completed',
         verifiedAt: previewResult.previewEndedAt,
@@ -2451,6 +2572,25 @@ program
     } else if (hasBlockingTrackingHealth(trackingHealth)) {
       console.log(`\n   Publish is blocked until tracking-health blockers are resolved.`);
     }
+
+    await captureTelemetry('preview_completed', {
+      command_name: 'preview',
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      total_expected: previewResult.totalExpected,
+      total_fired: previewResult.totalFired,
+      health_grade: trackingHealth.grade,
+      health_score: trackingHealth.score,
+      blocker_count: trackingHealth.blockers.length,
+      unexpected_event_count: trackingHealth.unexpectedEventNames.length,
+      manual_mode: false,
+    });
+    await captureCommandCompleted('preview', commandStartedAt, 'success', {
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 // STEP 7: Publish container
@@ -2475,6 +2615,7 @@ program
     force?: boolean;
     yes?: boolean;
   }) => {
+    const commandStartedAt = Date.now();
     let accountId = opts.accountId;
     let containerId = opts.containerId;
     let workspaceId = opts.workspaceId;
@@ -2532,6 +2673,9 @@ program
       const confirm = await prompt('\n⚠️  This will PUBLISH the GTM container (affects live site). Continue? (yes/no): ');
       if (confirm.toLowerCase() !== 'yes') {
         console.log('Publish cancelled.');
+        await captureCommandCompleted('publish', commandStartedAt, 'cancelled', {
+          scenario: activeScenario,
+        });
         return;
       }
     }
@@ -2550,7 +2694,7 @@ program
     console.log(`   Version ID: ${result.versionId}`);
     console.log(`\n   The GA4 event tracking is now LIVE on your website.`);
     console.log(`   Monitor events in GA4 Realtime: https://analytics.google.com/`);
-    refreshAndIndexWorkflowState(artifactDir, {
+    const workflowState = refreshAndIndexWorkflowState(artifactDir, {
       publish: {
         status: 'completed',
         publishedAt: new Date().toISOString(),
@@ -2559,6 +2703,22 @@ program
       },
     });
     console.log(`   Workflow state: ${path.join(artifactDir, WORKFLOW_STATE_FILE)}`);
+
+    await captureTelemetry('gtm_publish_completed', {
+      command_name: 'publish',
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      forced: !!opts.force,
+      health_grade: publishReadiness.health?.grade,
+      health_score: publishReadiness.health?.score,
+      blocker_count: publishReadiness.health?.blockers.length,
+    });
+    await captureCommandCompleted('publish', commandStartedAt, 'success', {
+      scenario: workflowState.scenario,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 program
