@@ -12,6 +12,7 @@
     "dev": "ts-node src/cli.ts",
     "doctor": "node scripts/doctor.mjs",
     "export:skills": "node scripts/export-skills.mjs",
+    "export:skills:clawhub": "node scripts/export-skills.mjs --profile clawhub",
     "install:skills": "node scripts/install-skills.mjs",
     "sync:skill-docs": "node scripts/sync-skill-docs.mjs",
     "test": "npm run build && npm run test:built",

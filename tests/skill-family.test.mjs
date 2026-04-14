@@ -3,6 +3,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import {
+  EXPORT_PROFILE_CLAWHUB,
+  EXPORT_PROFILE_PORTABLE,
+  getCopiedDirectoriesForProfile,
+  listExpectedExportedFiles,
+  loadSourceSkillManifest,
+  normalizeSkillContent,
+} from '../scripts/skill-bundles.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -144,4 +152,42 @@ test('Shared install docs cover the default minimal install and optional phase i
   assert.match(readme, /\[DEVELOPING\.md\]\(DEVELOPING\.md\)/, 'README should route repo-local CLI and maintainer setup to DEVELOPING.md.');
   assert.doesNotMatch(readme, /## Advanced Commands/, 'README should no longer foreground CLI-heavy command inventory.');
   assert.doesNotMatch(readme, /## Workflow/, 'README should no longer read like the internal workflow contract.');
+});
+
+test('portable and ClawHub export profiles keep different packaging boundaries', () => {
+  const manifest = loadSourceSkillManifest(repoRoot);
+  const rootBundle = manifest.bundles.find(bundle => bundle.name === 'event-tracking-skill');
+
+  assert.ok(rootBundle, 'Source manifest should include the umbrella skill bundle.');
+  assert.ok(
+    getCopiedDirectoriesForProfile(rootBundle, EXPORT_PROFILE_PORTABLE).some(entry => entry.target === 'runtime'),
+    'Portable exports should keep the runtime directory.',
+  );
+  assert.ok(
+    getCopiedDirectoriesForProfile(rootBundle, EXPORT_PROFILE_CLAWHUB).every(entry => entry.target !== 'runtime'),
+    'ClawHub exports should omit the runtime directory.',
+  );
+
+  const portableSkill = normalizeSkillContent(rootBundle, readText(rootBundle.skillFile), { profile: EXPORT_PROFILE_PORTABLE });
+  const clawhubSkill = normalizeSkillContent(rootBundle, readText(rootBundle.skillFile), { profile: EXPORT_PROFILE_CLAWHUB });
+
+  assert.match(portableSkill, /## Auto-Update/, 'Portable exports should keep the Auto-Update bootstrap.');
+  assert.doesNotMatch(clawhubSkill, /## Auto-Update/, 'ClawHub exports should strip the Auto-Update bootstrap.');
+  assert.match(clawhubSkill, /compatibility:/, 'ClawHub exports should preserve compatibility frontmatter.');
+
+  const portableFiles = listExpectedExportedFiles(repoRoot, manifest, { profile: EXPORT_PROFILE_PORTABLE });
+  const clawhubFiles = listExpectedExportedFiles(repoRoot, manifest, { profile: EXPORT_PROFILE_CLAWHUB });
+
+  assert.ok(
+    portableFiles.some(relativePath => relativePath.endsWith('runtime/skill-runtime/update-check.mjs')),
+    'Portable exports should include the updater runtime.',
+  );
+  assert.ok(
+    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/')),
+    'ClawHub exports should not include runtime files.',
+  );
+  assert.ok(
+    clawhubFiles.some(relativePath => relativePath.startsWith('dist/clawhub-skill-bundles/event-tracking-skill/')),
+    'ClawHub exports should use the dedicated publish directory.',
+  );
 });

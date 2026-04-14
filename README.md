@@ -66,6 +66,18 @@ For advanced install options and exported skill bundles:
 - [docs/README.install.md](docs/README.install.md)
 - [docs/skills.md](docs/skills.md)
 
+### ClawHub Publish
+
+If you are publishing this skill to ClawHub, publish the exported public bundle instead of the full repository:
+
+```bash
+npm run export:skills:clawhub
+```
+
+Then upload `dist/clawhub-skill-bundles/event-tracking-skill`.
+
+That public bundle keeps the agent-facing skill docs and references, but strips the bundled auto-update runtime and other maintainer-only packaging files that trigger broader security scans.
+
 ## Quick Start
 
 ### Use It As A Skill

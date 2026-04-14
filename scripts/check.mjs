@@ -6,9 +6,12 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import {
+  EXPORT_PROFILE_CLAWHUB,
+  EXPORT_PROFILE_PORTABLE,
   SOURCE_SKILL_MANIFEST,
   getPhaseSkillBundles,
   getSkillBundles,
+  getExportBundleRoot,
   listExpectedExportedFiles,
   loadSourceSkillManifest,
 } from './skill-bundles.mjs';
@@ -245,7 +248,8 @@ const sourceManifest = loadSourceSkillManifest(repoRoot);
 const allBundles = getSkillBundles(sourceManifest);
 const phaseSkillFiles = getPhaseSkillBundles(sourceManifest).map(bundle => bundle.skillFile);
 const agentMetadataFiles = allBundles.map(bundle => bundle.metadataFile);
-const exportedBundleFiles = listExpectedExportedFiles(repoRoot, sourceManifest);
+const exportedBundleFiles = listExpectedExportedFiles(repoRoot, sourceManifest, { profile: EXPORT_PROFILE_PORTABLE });
+const clawhubExportedBundleFiles = listExpectedExportedFiles(repoRoot, sourceManifest, { profile: EXPORT_PROFILE_CLAWHUB });
 const contractMarkdownFiles = [
   'SKILL.md',
   'README.md',
@@ -273,6 +277,7 @@ const cliCommandNames = parseCliCommandNames(captureStep('Capture CLI command su
   env: { ...process.env, EVENT_TRACKING_PUBLIC_CMD: './event-tracking' },
 }));
 runStep('Export self-contained skill bundles', 'node', ['scripts/export-skills.mjs']);
+runStep('Export ClawHub publish bundles', 'node', ['scripts/export-skills.mjs', '--profile', EXPORT_PROFILE_CLAWHUB]);
 runStep('Install the default umbrella skill bundle into a temp skills directory', 'node', ['scripts/install-skills.mjs', '--skip-export', '--target-dir', tempInstallDir]);
 runStep('Install an explicit phase skill bundle into a temp skills directory', 'node', ['scripts/install-skills.mjs', '--skip-export', '--target-dir', tempSingleSkillInstallDir, '--skill', 'tracking-schema']);
 runStep('Install the full skill family into a temp skills directory', 'node', ['scripts/install-skills.mjs', '--skip-export', '--target-dir', tempFullInstallDir, '--with-phases']);
@@ -303,6 +308,9 @@ agentMetadataFiles.forEach(relativePath => {
 });
 exportedBundleFiles.forEach(relativePath => {
   assertFileExists(relativePath, 'Self-contained skill bundles should export the installable skill surface.');
+});
+clawhubExportedBundleFiles.forEach(relativePath => {
+  assertFileExists(relativePath, 'ClawHub exports should keep a docs-only publish surface.');
 });
 if (readText('VERSION').trim() !== readJson('package.json').version) {
   console.error('Check failed: VERSION must match package.json version.');
@@ -390,6 +398,13 @@ const exportedRootSkillContent = fs.readFileSync(
   path.join(repoRoot, 'dist', 'skill-bundles', 'event-tracking-skill', 'SKILL.md'),
   'utf8',
 );
+const clawhubExportedRootSkillContent = fs.readFileSync(
+  path.join(repoRoot, getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'SKILL.md'),
+  'utf8',
+);
+const clawhubExportedRootBundleMetadata = readJson(
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'bundle.json'),
+);
 if (!exportedSkillContent.includes('## Auto-Update')) {
   console.error('Check failed: exported bundles should ship the portable Auto-Update bootstrap.');
   process.exit(1);
@@ -423,6 +438,18 @@ if (!linkedSkillContent.includes('## Auto-Update')) {
   console.error('Check failed: link-mode installs should still expose the portable Auto-Update bootstrap from the exported bundle.');
   process.exit(1);
 }
+if (clawhubExportedRootSkillContent.includes('## Auto-Update')) {
+  console.error('Check failed: ClawHub exports should strip the Auto-Update bootstrap.');
+  process.exit(1);
+}
+if ('updateSource' in clawhubExportedRootBundleMetadata) {
+  console.error('Check failed: ClawHub bundle metadata should not advertise updater sources.');
+  process.exit(1);
+}
+assertFileMissing(
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'runtime', 'skill-runtime', 'update-check.mjs'),
+  'ClawHub exports should not ship the updater runtime.',
+);
 [
   'event-tracking-skill/references/architecture.md',
   'event-tracking-skill/references/skill-map.md',

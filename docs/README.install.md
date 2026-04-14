@@ -4,6 +4,14 @@ Use this guide when you want to install the exported skill bundles into a local 
 
 This is the shared installation path across agent runtimes.
 
+If you are packaging a public marketplace release for ClawHub, do not upload the full repository or the normal installer-oriented bundle set. Export the public bundle instead:
+
+```bash
+npm run export:skills:clawhub
+```
+
+Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only the published skill surface and omit the bundled auto-update runtime.
+
 ## Recommended Path
 
 This installer path assumes you already cloned this repository locally and are running commands from the repository root.

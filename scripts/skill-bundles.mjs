@@ -6,6 +6,8 @@ import path from 'node:path';
 export const SOURCE_SKILL_MANIFEST = 'skills/manifest.json';
 export const SKILL_FAMILY_NAME = 'event-tracking-skill';
 export const SKILL_FAMILY_REPOSITORY = 'jtrackingai/event-tracking-skill';
+export const EXPORT_PROFILE_PORTABLE = 'portable';
+export const EXPORT_PROFILE_CLAWHUB = 'clawhub';
 
 const AUTO_UPDATE_BOOTSTRAP_START = '<!-- event-tracking auto-update bootstrap:start -->';
 const AUTO_UPDATE_BOOTSTRAP_END = '<!-- event-tracking auto-update bootstrap:end -->';
@@ -66,6 +68,24 @@ export function getBundleOutputPath(bundle) {
   return path.join('dist', 'skill-bundles', bundle.name);
 }
 
+export function getExportBundleRoot(profile = EXPORT_PROFILE_PORTABLE) {
+  return profile === EXPORT_PROFILE_CLAWHUB
+    ? path.join('dist', 'clawhub-skill-bundles')
+    : path.join('dist', 'skill-bundles');
+}
+
+export function getProfileBundleOutputPath(bundle, profile = EXPORT_PROFILE_PORTABLE) {
+  return path.join(getExportBundleRoot(profile), bundle.name);
+}
+
+export function getCopiedDirectoriesForProfile(bundle, profile = EXPORT_PROFILE_PORTABLE) {
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return (bundle.copiedDirectories || []).filter(copyEntry => copyEntry.target === 'references');
+  }
+
+  return bundle.copiedDirectories || [];
+}
+
 function listFilesRecursive(rootDir) {
   const files = [];
 
@@ -81,17 +101,19 @@ function listFilesRecursive(rootDir) {
   return files;
 }
 
-export function listExpectedExportedFiles(repoRoot, manifest) {
-  const expected = new Set(['dist/skill-bundles/manifest.json']);
+export function listExpectedExportedFiles(repoRoot, manifest, options = {}) {
+  const profile = options.profile || EXPORT_PROFILE_PORTABLE;
+  const exportRoot = getExportBundleRoot(profile);
+  const expected = new Set([path.join(exportRoot, 'manifest.json')]);
 
   getSkillBundles(manifest).forEach(bundle => {
-    const bundleRoot = getBundleOutputPath(bundle);
+    const bundleRoot = getProfileBundleOutputPath(bundle, profile);
     expected.add(path.join(bundleRoot, 'SKILL.md'));
     expected.add(path.join(bundleRoot, 'VERSION'));
     expected.add(path.join(bundleRoot, 'bundle.json'));
     expected.add(path.join(bundleRoot, 'agents', 'openai.yaml'));
 
-    (bundle.copiedDirectories || []).forEach(copyEntry => {
+    getCopiedDirectoriesForProfile(bundle, profile).forEach(copyEntry => {
       const sourceRoot = path.join(repoRoot, copyEntry.source);
       const sourceFiles = listFilesRecursive(sourceRoot);
       sourceFiles.forEach(sourceFile => {
@@ -147,6 +169,12 @@ function replaceOrInjectAutoUpdateBootstrap(content, bootstrap) {
   return injectAfterFrontmatter(normalized, bootstrap);
 }
 
+function removeAutoUpdateBootstrap(content) {
+  const normalized = content.replace(/\r\n/g, '\n');
+  const markerPattern = new RegExp(`\\n?${escapeRegExp(AUTO_UPDATE_BOOTSTRAP_START)}[\\s\\S]*?${escapeRegExp(AUTO_UPDATE_BOOTSTRAP_END)}\\n?`, 'g');
+  return normalized.replace(markerPattern, '\n').replace(/\n{3,}/g, '\n\n');
+}
+
 function buildPortableAutoUpdateBootstrap(bundleName) {
   return [
     `${AUTO_UPDATE_BOOTSTRAP_START}`,
@@ -169,17 +197,19 @@ function buildPortableAutoUpdateBootstrap(bundleName) {
   ].join('\n');
 }
 
-export function normalizeSkillContent(bundle, content) {
-  const portableBootstrap = buildPortableAutoUpdateBootstrap(bundle.name);
+export function normalizeSkillContent(bundle, content, options = {}) {
+  const profile = options.profile || EXPORT_PROFILE_PORTABLE;
+  const normalizedContent = bundle.kind === 'umbrella'
+    ? normalizePublicCommand(content)
+    : normalizePublicCommand(content)
+      .replaceAll('../../references/', 'references/')
+      .replaceAll('../../references/architecture.md', 'references/architecture.md');
 
-  if (bundle.kind === 'umbrella') {
-    return replaceOrInjectAutoUpdateBootstrap(normalizePublicCommand(content), portableBootstrap);
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return removeAutoUpdateBootstrap(normalizedContent);
   }
 
-  return replaceOrInjectAutoUpdateBootstrap(
-    normalizePublicCommand(content)
-      .replaceAll('../../references/', 'references/')
-      .replaceAll('../../references/architecture.md', 'references/architecture.md'),
-    portableBootstrap,
-  );
+  const portableBootstrap = buildPortableAutoUpdateBootstrap(bundle.name);
+
+  return replaceOrInjectAutoUpdateBootstrap(normalizedContent, portableBootstrap);
 }
