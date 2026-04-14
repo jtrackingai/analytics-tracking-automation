@@ -35,6 +35,7 @@ npm run doctor
 | `npm run doctor` | verify Node, built CLI, repo-local wrapper, and Playwright Chromium |
 | `npm run export:skills` | generate self-contained skill bundles under `dist/skill-bundles/` |
 | `npm run install:skills -- [--target-dir <dir>] [--skill <name>] [--mode <copy|link>]` | copy or link exported bundles into an agent skills directory |
+| `npm run sync:skill-docs` | refresh the contract-generated skill-map sections in repo docs from `skills/contract.json` |
 | `npm run check` | rebuild, run automated tests and doctor, smoke-test `./event-tracking --help`, export skill bundles, and validate documented command surface, artifact contract, and local docs links |
 | `npm run dev` | run the CLI through `ts-node` while iterating locally |
 
@@ -48,6 +49,8 @@ Keep these rules stable unless you intentionally want to change the public surfa
 - `skills/*/SKILL.md` should stay phase-scoped and should not duplicate the full umbrella workflow
 - skill frontmatter `description` fields should stay trigger-oriented and start with `Use when ...`
 - `skills/manifest.json` is the source of truth for the exported / installable skill family; update it when adding, renaming, or removing shipped skills
+- `skills/contract.json` is the source of truth for entry intents, artifact-driven phase routing, per-phase command / output ownership, and command stop rules
+- the generated skill-map sections in `docs/skills.md` and `references/skill-map.md` should be refreshed from `skills/contract.json`, not edited by hand
 - `agents/openai.yaml` and `skills/*/agents/openai.yaml` should stay minimal and UI-focused
 - `dist/skill-bundles/` is generated output; change source docs first, then regenerate with `npm run export:skills`
 - installed copies under the default agent skills target are deployment output; regenerate and reinstall instead of editing them in place
@@ -112,6 +115,8 @@ If you change CLI behavior:
 - update [SKILL.md](SKILL.md) when the agent workflow contract changes
 - update affected `skills/*/SKILL.md` files when a phase boundary or command changes
 - update `skills/manifest.json` when the shipped skill inventory changes
+- update `skills/contract.json` when entry intents, artifact routing rules, owned commands, or required outputs change
+- run `npm run sync:skill-docs` after changing contract fields that feed the generated skill-map sections
 - update affected `agents/openai.yaml` files when skill naming, positioning, or default prompts change
 - inspect `dist/skill-bundles/` after regeneration when the change should affect exported skill packaging
 - rerun the installer when the change should affect installed skill contents

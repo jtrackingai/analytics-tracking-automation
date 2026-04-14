@@ -1,0 +1,404 @@
+{
+  "familyName": "event-tracking-skill",
+  "sourceManifest": "skills/manifest.json",
+  "umbrellaSkill": "event-tracking-skill",
+  "entryIntents": {
+    "resume_existing_run": {
+      "description": "The user already has an artifact directory or one of its files and wants to continue from the current checkpoint.",
+      "preferredEntryCommand": "status",
+      "defaultPhase": null
+    },
+    "new_setup": {
+      "description": "A fresh GA4 + GTM implementation from scratch.",
+      "preferredEntryCommand": "run-new-setup",
+      "defaultPhase": "tracking-discover"
+    },
+    "tracking_update": {
+      "description": "A scoped revision or extension of an existing implementation.",
+      "preferredEntryCommand": "run-tracking-update",
+      "defaultPhase": null
+    },
+    "upkeep": {
+      "description": "A maintenance / drift review on an existing setup.",
+      "preferredEntryCommand": "run-upkeep",
+      "defaultPhase": null
+    },
+    "tracking_health_audit": {
+      "description": "An audit-only assessment of the current live tracking setup.",
+      "preferredEntryCommand": "run-health-audit",
+      "defaultPhase": "tracking-discover"
+    },
+    "analysis_only": {
+      "description": "Site inspection and artifact bootstrap without continuing into the full workflow.",
+      "preferredEntryCommand": "analyze",
+      "defaultPhase": "tracking-discover"
+    }
+  },
+  "intakePolicies": [
+    {
+      "id": "conflicting_fresh_url_and_artifact_prefers_resume",
+      "when": {
+        "hasFreshUrl": true,
+        "hasArtifactReference": true
+      },
+      "action": "route",
+      "intent": "resume_existing_run",
+      "reason": "Resume from the existing artifact instead of restarting from a fresh URL."
+    },
+    {
+      "id": "broad_tracking_request_requires_clarification",
+      "when": {
+        "broadTrackingRequest": true,
+        "hasFreshUrl": false,
+        "hasArtifactReference": false,
+        "intentAlreadyClear": false
+      },
+      "action": "clarify",
+      "questionStyle": "one short plain-language intake question",
+      "reason": "The request is broad but not yet specific enough to choose new setup, update, upkeep, audit, analyze-only, or resume."
+    },
+    {
+      "id": "fresh_url_setup_defaults_new_setup",
+      "when": {
+        "hasFreshUrl": true,
+        "setupRequested": true
+      },
+      "action": "route",
+      "intent": "new_setup",
+      "reason": "A fresh URL plus setup language should default to the new setup workflow."
+    },
+    {
+      "id": "fresh_url_inspection_defaults_analysis_only",
+      "when": {
+        "hasFreshUrl": true,
+        "inspectRequested": true
+      },
+      "action": "route",
+      "intent": "analysis_only",
+      "reason": "A fresh URL plus inspect/analyze language should stay analysis-only unless the user asks to continue."
+    }
+  ],
+  "artifactRoutes": [
+    {
+      "id": "site_analysis_needs_grouping",
+      "artifact": "site-analysis.json",
+      "phase": "tracking-group",
+      "requires": {
+        "pageGroupsConfirmed": false
+      }
+    },
+    {
+      "id": "site_analysis_needs_live_gtm_review",
+      "artifact": "site-analysis.json",
+      "phase": "tracking-live-gtm",
+      "requires": {
+        "pageGroupsConfirmed": true,
+        "liveGtmDetected": true,
+        "liveBaselineReviewed": false
+      }
+    },
+    {
+      "id": "site_analysis_ready_for_schema",
+      "artifact": "site-analysis.json",
+      "phase": "tracking-schema",
+      "requires": {
+        "pageGroupsConfirmed": true
+      }
+    },
+    {
+      "id": "event_schema_in_progress",
+      "artifact": "event-schema.json",
+      "phase": "tracking-schema"
+    },
+    {
+      "id": "gtm_config_ready_for_sync",
+      "artifact": "gtm-config.json",
+      "phase": "tracking-sync"
+    },
+    {
+      "id": "gtm_context_ready_for_verify",
+      "artifact": "gtm-context.json",
+      "phase": "tracking-verify"
+    }
+  ],
+  "branchOverlays": {
+    "shopify": {
+      "phase": "tracking-shopify",
+      "sharedEarlyStages": [
+        "tracking-discover",
+        "tracking-group"
+      ],
+      "modifiesPhases": [
+        "tracking-schema",
+        "tracking-sync",
+        "tracking-verify"
+      ],
+      "requiredSignals": [
+        "platformConfirmed",
+        "sharedEarlyStagesComplete",
+        "shopifyBranchRequested"
+      ]
+    }
+  },
+  "stopRules": [
+    {
+      "id": "page_groups_must_be_confirmed",
+      "command": "prepare-schema",
+      "blockWhen": {
+        "pageGroupsConfirmed": false
+      },
+      "allowOverride": false,
+      "stopBoundary": "page-group approval"
+    },
+    {
+      "id": "live_gtm_review_required_before_schema",
+      "command": "prepare-schema",
+      "blockWhen": {
+        "pageGroupsConfirmed": true,
+        "liveGtmDetected": true,
+        "liveBaselineReviewed": false
+      },
+      "allowOverride": false,
+      "stopBoundary": "live GTM baseline review"
+    },
+    {
+      "id": "schema_must_be_confirmed",
+      "command": "generate-gtm",
+      "blockWhen": {
+        "schemaConfirmed": false
+      },
+      "allowOverride": true,
+      "overrideFlag": "--force",
+      "stopBoundary": "schema approval"
+    },
+    {
+      "id": "publish_requires_non_blocking_tracking_health",
+      "command": "publish",
+      "blockWhenAny": [
+        {
+          "trackingHealthPresent": false
+        },
+        {
+          "trackingHealthBlocked": true
+        },
+        {
+          "trackingHealthManualOnly": true
+        }
+      ],
+      "allowOverride": true,
+      "overrideFlag": "--force",
+      "stopBoundary": "preview or explicit publish handoff"
+    },
+    {
+      "id": "tracking_health_audit_blocks_deployment_commands",
+      "commands": [
+        "generate-gtm",
+        "sync",
+        "publish"
+      ],
+      "blockWhen": {
+        "scenario": "tracking_health_audit",
+        "userExplicitOverride": false
+      },
+      "allowOverride": true,
+      "overrideFlag": "explicit user override",
+      "stopBoundary": "audit-only scenario"
+    }
+  ],
+  "phases": {
+    "tracking-discover": {
+      "skillFile": "skills/tracking-discover/SKILL.md",
+      "role": "analysis bootstrap",
+      "runtimeUseWhen": "the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory",
+      "typicalStopPoint": "site-analysis.json",
+      "userFacingBestFor": "site inspection and bootstrap",
+      "userTypicalSay": "Analyze this site first",
+      "ownedCommands": [
+        "analyze"
+      ],
+      "requiredOutputs": [
+        "site-analysis.json",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [],
+      "defaultNextCommand": "status",
+      "stopBoundary": "analysis",
+      "closeoutShape": [
+        "coverage",
+        "platform",
+        "GTM detection",
+        "warnings",
+        "files and next command"
+      ]
+    },
+    "tracking-group": {
+      "skillFile": "skills/tracking-group/SKILL.md",
+      "role": "page grouping review",
+      "runtimeUseWhen": "the user wants page-group authoring, grouping adjustments, or page-group approval only",
+      "typicalStopPoint": "confirmed site-analysis.json",
+      "userFacingBestFor": "page-group review",
+      "userTypicalSay": "Group these pages by business meaning",
+      "ownedCommands": [
+        "confirm-page-groups"
+      ],
+      "requiredOutputs": [
+        "site-analysis.json",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [],
+      "defaultNextCommand": "prepare-schema",
+      "stopBoundary": "page-group approval",
+      "closeoutShape": [
+        "group count",
+        "grouping logic",
+        "compact group table",
+        "files and next command"
+      ]
+    },
+    "tracking-live-gtm": {
+      "skillFile": "skills/tracking-live-gtm/SKILL.md",
+      "role": "live GTM baseline audit",
+      "runtimeUseWhen": "the user wants to inspect the real live GTM runtime before schema generation or compare multiple live GTM containers",
+      "typicalStopPoint": "live-gtm-analysis.json and live-gtm-review.md",
+      "userFacingBestFor": "live GTM baseline review",
+      "userTypicalSay": "Show me what is already live in GTM",
+      "ownedCommands": [
+        "analyze-live-gtm",
+        "verify-live-gtm"
+      ],
+      "requiredOutputs": [
+        "live-gtm-analysis.json",
+        "live-gtm-review.md",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [
+        "live-preview-result.json",
+        "live-preview-report.md",
+        "live-tracking-health.json"
+      ],
+      "defaultNextCommand": "prepare-schema",
+      "stopBoundary": "live GTM baseline review",
+      "closeoutShape": [
+        "detected live events",
+        "primary comparison baseline",
+        "issues and evidence split",
+        "files and next command"
+      ]
+    },
+    "tracking-schema": {
+      "skillFile": "skills/tracking-schema/SKILL.md",
+      "role": "schema authoring and approval",
+      "runtimeUseWhen": "the user wants event design, selector validation, schema review, or spec generation",
+      "typicalStopPoint": "confirmed event-schema.json",
+      "userFacingBestFor": "event-plan design and approval",
+      "userTypicalSay": "Help me design or review the event schema",
+      "ownedCommands": [
+        "prepare-schema",
+        "validate-schema",
+        "generate-spec",
+        "confirm-schema"
+      ],
+      "requiredOutputs": [
+        "event-schema.json",
+        "schema-decisions.jsonl",
+        "schema-restore/",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [
+        "event-spec.md",
+        "tracking-plan-comparison.md"
+      ],
+      "defaultNextCommand": "generate-gtm",
+      "stopBoundary": "schema approval",
+      "closeoutShape": [
+        "Event Table",
+        "Common Properties",
+        "Event-specific Properties",
+        "files and next command"
+      ]
+    },
+    "tracking-sync": {
+      "skillFile": "skills/tracking-sync/SKILL.md",
+      "role": "GTM config generation and sync",
+      "runtimeUseWhen": "the user wants GTM-ready config, workspace sync, or container selection",
+      "typicalStopPoint": "gtm-config.json or gtm-context.json",
+      "userFacingBestFor": "GTM generation and sync",
+      "userTypicalSay": "Generate or sync the GTM setup",
+      "ownedCommands": [
+        "generate-gtm",
+        "sync"
+      ],
+      "requiredOutputs": [
+        "gtm-config.json",
+        "gtm-context.json",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [
+        "shopify-custom-pixel.js",
+        "shopify-install.md"
+      ],
+      "defaultNextCommand": "preview",
+      "stopBoundary": "sync",
+      "closeoutShape": [
+        "what was generated or synced",
+        "what still needs confirmation",
+        "manual actions",
+        "files and next command"
+      ]
+    },
+    "tracking-verify": {
+      "skillFile": "skills/tracking-verify/SKILL.md",
+      "role": "preview QA and go-live handoff",
+      "runtimeUseWhen": "the user wants preview verification, QA interpretation, or a publish-ready checkpoint",
+      "typicalStopPoint": "preview-report.md, tracking-health.json, or publish outcome",
+      "userFacingBestFor": "preview QA and release readiness",
+      "userTypicalSay": "Check whether tracking is healthy before publish",
+      "ownedCommands": [
+        "preview",
+        "publish"
+      ],
+      "requiredOutputs": [
+        "preview-report.md",
+        "preview-result.json",
+        "tracking-health.json",
+        "tracking-health-report.md",
+        "tracking-health-history/",
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [],
+      "defaultNextCommand": "publish",
+      "stopBoundary": "preview or explicit publish handoff",
+      "closeoutShape": [
+        "verdict",
+        "blockers",
+        "unexpected events",
+        "next action"
+      ]
+    },
+    "tracking-shopify": {
+      "skillFile": "skills/tracking-shopify/SKILL.md",
+      "role": "Shopify-specific overlay",
+      "runtimeUseWhen": "the platform is Shopify or the user explicitly wants the Shopify branch behavior",
+      "typicalStopPoint": "Shopify bootstrap review, custom pixel, install guide, or manual verification plan",
+      "userFacingBestFor": "Shopify-specific branch",
+      "userTypicalSay": "This is a Shopify storefront",
+      "ownedCommands": [],
+      "requiredOutputs": [
+        "workflow-state.json"
+      ],
+      "optionalOutputs": [
+        "shopify-schema-template.json",
+        "shopify-bootstrap-review.md",
+        "shopify-custom-pixel.js",
+        "shopify-install.md"
+      ],
+      "defaultNextCommand": null,
+      "stopBoundary": "requested Shopify-specific artifact or manual verification plan",
+      "closeoutShape": [
+        "current Shopify-specific output type",
+        "manual install or verification guidance",
+        "files and next action"
+      ]
+    }
+  }
+}

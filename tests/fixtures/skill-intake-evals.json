@@ -1,0 +1,44 @@
+[
+  {
+    "name": "broad tracking request asks for clarification",
+    "input": "Help me with tracking for this site.",
+    "context": {
+      "broadTrackingRequest": true,
+      "hasFreshUrl": false,
+      "hasArtifactReference": false,
+      "intentAlreadyClear": false
+    },
+    "expectedAction": "clarify",
+    "expectedIntent": null
+  },
+  {
+    "name": "fresh URL plus artifact reference prefers resume",
+    "input": "Use https://www.example.com but continue from ./output/example_com/event-schema.json.",
+    "context": {
+      "hasFreshUrl": true,
+      "hasArtifactReference": true
+    },
+    "expectedAction": "route",
+    "expectedIntent": "resume_existing_run"
+  },
+  {
+    "name": "fresh URL plus setup language defaults to new setup",
+    "input": "Set up tracking for https://www.example.com from scratch.",
+    "context": {
+      "hasFreshUrl": true,
+      "setupRequested": true
+    },
+    "expectedAction": "route",
+    "expectedIntent": "new_setup"
+  },
+  {
+    "name": "fresh URL plus inspect language defaults to analysis only",
+    "input": "Inspect https://www.example.com and tell me what tracking signals are there.",
+    "context": {
+      "hasFreshUrl": true,
+      "inspectRequested": true
+    },
+    "expectedAction": "route",
+    "expectedIntent": "analysis_only"
+  }
+]

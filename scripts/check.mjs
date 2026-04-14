@@ -265,6 +265,7 @@ const tempLinkInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking
 runStep('Build CLI', 'npm', ['run', 'build']);
 runStep('Run automated tests', 'npm', ['run', 'test:built']);
 runStep('Run doctor', 'node', ['scripts/doctor.mjs']);
+runStep('Verify contract-generated skill docs are in sync', 'node', ['scripts/sync-skill-docs.mjs', '--check']);
 runStep('Smoke-test repo-local CLI', './event-tracking', ['--help'], {
   env: { ...process.env, EVENT_TRACKING_PUBLIC_CMD: './event-tracking' },
 });
@@ -283,10 +284,16 @@ assertFileExists('ARCHITECTURE.md', 'Keep a dedicated system-design document in 
 assertFileExists('DEVELOPING.md', 'Keep a dedicated maintainer guide in the repo root.');
 assertFileExists('docs/README.install.md', 'Keep a shared agent-install guide for portable skill installation.');
 assertFileExists('docs/skills.md', 'Keep a dedicated skill map when the repo exposes a skill family.');
+assertFileExists('skills/contract.json', 'Keep a structured skill-family contract so routing and phase boundaries have a machine-checkable source of truth.');
 assertFileExists('references/architecture.md', 'Keep an install-facing architecture reference in source so exported bundles can ship it unchanged.');
 assertFileExists('references/skill-map.md', 'Keep an install-facing skill-map reference in source so exported bundles can ship it unchanged.');
 assertFileExists('tests/workflow-state.test.mjs', 'Keep a standalone automated test suite for workflow-state and gate behavior.');
 assertFileExists('tests/skill-family.test.mjs', 'Keep automated coverage for the skill-family routing and packaging contract.');
+assertFileExists('tests/skill-contract.test.mjs', 'Keep automated coverage for the structured skill contract and routing eval fixtures.');
+assertFileExists('tests/fixtures/skill-routing-evals.json', 'Keep realistic routing eval fixtures for the umbrella skill intake contract.');
+assertFileExists('tests/fixtures/skill-stop-rule-evals.json', 'Keep realistic stop-rule eval fixtures for command guardrails and approval gates.');
+assertFileExists('tests/fixtures/skill-intake-evals.json', 'Keep realistic intake-policy eval fixtures for clarification and conflict handling.');
+assertFileExists('tests/fixtures/skill-closeout-evals.json', 'Keep realistic closeout-shape eval fixtures for answer-first phase summaries.');
 assertFileExists('tests/workflow-enhancements.test.mjs', 'Keep automated coverage for run indexing, schema audit, and tracking health additions.');
 phaseSkillFiles.forEach(relativePath => {
   assertFileExists(relativePath, 'Phase skills should exist and remain explicitly tracked.');

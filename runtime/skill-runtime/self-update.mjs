@@ -11,6 +11,7 @@ import {
   loadInstallContext,
   resolveInstallState,
   runCommand,
+  verifyFileSha256,
 } from './common.mjs';
 
 function printHelp() {
@@ -89,6 +90,7 @@ async function main() {
 
   try {
     await downloadFile(updateState.updateSource.tarballUrl, archiveFile, 30 * 1000);
+    verifyFileSha256(archiveFile, updateState.updateSource.tarballSha256, 'update tarball');
     const extractedRepo = extractTarball(archiveFile, path.join(tempRoot, 'repo'));
 
     runCommand('node', ['scripts/export-skills.mjs'], {

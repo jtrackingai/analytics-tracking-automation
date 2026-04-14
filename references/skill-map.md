@@ -6,16 +6,18 @@ If you are working in the source repository, the repo-facing companion lives at 
 
 ## Skill Map
 
+<!-- contract-generated:runtime-skill-map:start -->
 | Skill | Role | Use When | Typical Stop Point |
 | --- | --- | --- | --- |
 | `event-tracking-skill` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |
-| `tracking-discover` | analysis bootstrap | the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory | `site-analysis.json` |
-| `tracking-group` | page grouping review | the user wants page-group authoring, grouping adjustments, or page-group approval only | confirmed `site-analysis.json` |
-| `tracking-live-gtm` | live GTM baseline audit | the user wants to inspect the real live GTM runtime before schema generation or compare multiple live GTM containers | `live-gtm-analysis.json` and `live-gtm-review.md` |
-| `tracking-schema` | schema authoring and approval | the user wants event design, selector validation, schema review, or spec generation | confirmed `event-schema.json`, optional `event-spec.md`, and schema audit/restore artifacts |
-| `tracking-sync` | GTM config generation and sync | the user wants GTM-ready config, workspace sync, or container selection | `gtm-config.json` or `gtm-context.json` |
-| `tracking-verify` | preview QA and go-live handoff | the user wants preview verification, QA interpretation, or a publish-ready checkpoint | `preview-report.md`, `tracking-health.json`, or publish outcome |
+| `tracking-discover` | analysis bootstrap | the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory | site-analysis.json |
+| `tracking-group` | page grouping review | the user wants page-group authoring, grouping adjustments, or page-group approval only | confirmed site-analysis.json |
+| `tracking-live-gtm` | live GTM baseline audit | the user wants to inspect the real live GTM runtime before schema generation or compare multiple live GTM containers | live-gtm-analysis.json and live-gtm-review.md |
+| `tracking-schema` | schema authoring and approval | the user wants event design, selector validation, schema review, or spec generation | confirmed event-schema.json |
+| `tracking-sync` | GTM config generation and sync | the user wants GTM-ready config, workspace sync, or container selection | gtm-config.json or gtm-context.json |
+| `tracking-verify` | preview QA and go-live handoff | the user wants preview verification, QA interpretation, or a publish-ready checkpoint | preview-report.md, tracking-health.json, or publish outcome |
 | `tracking-shopify` | Shopify-specific overlay | the platform is Shopify or the user explicitly wants the Shopify branch behavior | Shopify bootstrap review, custom pixel, install guide, or manual verification plan |
+<!-- contract-generated:runtime-skill-map:end -->
 
 ## Design Rules
 
@@ -29,6 +31,7 @@ If you are working in the source repository, the repo-facing companion lives at 
 
 ## Boundaries
 
+<!-- contract-generated:runtime-boundaries:start -->
 `tracking-discover` owns:
 
 - `analyze`
@@ -37,32 +40,35 @@ If you are working in the source repository, the repo-facing companion lives at 
 
 `tracking-group` owns:
 
+- `confirm-page-groups`
 - editing `pageGroups`
 - page-group review
-- `confirm-page-groups`
 
 `tracking-live-gtm` owns:
 
 - `analyze-live-gtm`
+- `verify-live-gtm`
 - public live GTM runtime comparison
 - primary comparison container selection
 
 `tracking-schema` owns:
 
 - `prepare-schema`
-- schema authoring and validation
+- `validate-schema`
 - `generate-spec`
 - `confirm-schema`
+- schema authoring and validation
 
 `tracking-sync` owns:
 
 - `generate-gtm`
-- custom-dimension gate
 - `sync`
+- custom-dimension gate
 
 `tracking-verify` owns:
 
 - `preview`
+- `publish`
 - preview report interpretation
 - optional publish transition when the user explicitly wants to go live
 
@@ -72,6 +78,7 @@ If you are working in the source repository, the repo-facing companion lives at 
 - sync outputs
 - verification path
 - post-branch handoff rules once the platform is confirmed as Shopify
+<!-- contract-generated:runtime-boundaries:end -->
 
 ## Packaging Notes
 

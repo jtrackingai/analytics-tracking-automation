@@ -20,6 +20,7 @@ The umbrella skill owns first-turn conversational intake for chat entry points. 
 
 ## Skill Map
 
+<!-- contract-generated:user-skill-map:start -->
 | Skill | Best For | What The User Usually Says |
 | --- | --- | --- |
 | `event-tracking-skill` | end-to-end routing | "Help me set up or review tracking for this site" |
@@ -30,6 +31,7 @@ The umbrella skill owns first-turn conversational intake for chat entry points. 
 | `tracking-sync` | GTM generation and sync | "Generate or sync the GTM setup" |
 | `tracking-verify` | preview QA and release readiness | "Check whether tracking is healthy before publish" |
 | `tracking-shopify` | Shopify-specific branch | "This is a Shopify storefront" |
+<!-- contract-generated:user-skill-map:end -->
 
 ## Recommended Default
 

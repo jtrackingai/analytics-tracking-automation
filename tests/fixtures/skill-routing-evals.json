@@ -1,0 +1,114 @@
+[
+  {
+    "name": "new setup from fresh URL starts with discover",
+    "input": "Use event-tracking-skill to set up GA4 and GTM tracking for https://www.example.com from scratch.",
+    "expectedIntent": "new_setup",
+    "expectedEntryCommand": "run-new-setup",
+    "expectedPhase": "tracking-discover",
+    "expectedStopBoundary": "analysis"
+  },
+  {
+    "name": "analysis only request stays in discover",
+    "input": "Analyze https://www.example.com and stop after site analysis.",
+    "expectedIntent": "analysis_only",
+    "expectedEntryCommand": "analyze",
+    "expectedPhase": "tracking-discover",
+    "expectedStopBoundary": "analysis"
+  },
+  {
+    "name": "resume artifact directory uses status first",
+    "input": "Resume this existing run: ./output/example_com",
+    "context": {
+      "artifactIsDirectory": true
+    },
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": "status",
+    "expectedPhase": null,
+    "expectedStopBoundary": null
+  },
+  {
+    "name": "site analysis without confirmed groups routes to grouping",
+    "input": "Continue from ./output/example_com/site-analysis.json and help me review the page groups.",
+    "context": {
+      "pageGroupsConfirmed": false
+    },
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-group",
+    "expectedStopBoundary": "page-group approval"
+  },
+  {
+    "name": "confirmed site analysis with live GTM pending routes to live baseline review",
+    "input": "Continue from ./output/example_com/site-analysis.json before schema work starts.",
+    "context": {
+      "pageGroupsConfirmed": true,
+      "liveGtmDetected": true,
+      "liveBaselineReviewed": false
+    },
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-live-gtm",
+    "expectedStopBoundary": "live GTM baseline review"
+  },
+  {
+    "name": "event schema artifact routes to schema phase",
+    "input": "Continue schema review from ./output/example_com/event-schema.json.",
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-schema",
+    "expectedStopBoundary": "schema approval"
+  },
+  {
+    "name": "gtm config artifact routes to sync",
+    "input": "Sync this approved config: ./output/example_com/gtm-config.json",
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-sync",
+    "expectedStopBoundary": "sync"
+  },
+  {
+    "name": "gtm context artifact routes to verify",
+    "input": "Run preview QA for ./output/example_com/gtm-context.json before publish.",
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-verify",
+    "expectedStopBoundary": "preview or explicit publish handoff"
+  },
+  {
+    "name": "tracking update keeps scenario-first intake",
+    "input": "We already have tracking live. Run a tracking update for new CTA flows and revised signup paths.",
+    "expectedIntent": "tracking_update",
+    "expectedEntryCommand": "run-tracking-update",
+    "expectedPhase": null,
+    "expectedStopBoundary": null
+  },
+  {
+    "name": "upkeep keeps scenario-first intake",
+    "input": "Do an upkeep review for this setup and tell me what drifted.",
+    "expectedIntent": "upkeep",
+    "expectedEntryCommand": "run-upkeep",
+    "expectedPhase": null,
+    "expectedStopBoundary": null
+  },
+  {
+    "name": "health audit starts with discover but stays audit oriented",
+    "input": "Run a tracking health audit for https://www.example.com. I only want assessment, not deployment work.",
+    "expectedIntent": "tracking_health_audit",
+    "expectedEntryCommand": "run-health-audit",
+    "expectedPhase": "tracking-discover",
+    "expectedStopBoundary": "analysis"
+  },
+  {
+    "name": "confirmed Shopify branch can hand off to shopify overlay",
+    "input": "Continue this Shopify tracking setup with the Shopify-specific path now.",
+    "context": {
+      "platformConfirmed": "shopify",
+      "sharedEarlyStagesComplete": true,
+      "shopifyBranchRequested": true
+    },
+    "expectedIntent": "resume_existing_run",
+    "expectedEntryCommand": null,
+    "expectedPhase": "tracking-shopify",
+    "expectedStopBoundary": "requested Shopify-specific artifact or manual verification plan"
+  }
+]

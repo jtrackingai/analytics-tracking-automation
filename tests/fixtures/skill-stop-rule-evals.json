@@ -1,0 +1,117 @@
+[
+  {
+    "name": "prepare-schema blocks before page-group approval",
+    "command": "prepare-schema",
+    "context": {
+      "pageGroupsConfirmed": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "page_groups_must_be_confirmed"
+  },
+  {
+    "name": "prepare-schema blocks when live GTM review is still required",
+    "command": "prepare-schema",
+    "context": {
+      "pageGroupsConfirmed": true,
+      "liveGtmDetected": true,
+      "liveBaselineReviewed": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "live_gtm_review_required_before_schema"
+  },
+  {
+    "name": "prepare-schema proceeds after live GTM review is complete",
+    "command": "prepare-schema",
+    "context": {
+      "pageGroupsConfirmed": true,
+      "liveGtmDetected": true,
+      "liveBaselineReviewed": true
+    },
+    "expectedBlocked": false,
+    "expectedRule": null
+  },
+  {
+    "name": "generate-gtm blocks when schema is not confirmed",
+    "command": "generate-gtm",
+    "context": {
+      "schemaConfirmed": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "schema_must_be_confirmed"
+  },
+  {
+    "name": "generate-gtm can proceed with explicit force override",
+    "command": "generate-gtm",
+    "context": {
+      "schemaConfirmed": false,
+      "overrideUsed": true
+    },
+    "expectedBlocked": false,
+    "expectedRule": null
+  },
+  {
+    "name": "publish blocks when tracking health is missing",
+    "command": "publish",
+    "context": {
+      "trackingHealthPresent": false,
+      "trackingHealthBlocked": false,
+      "trackingHealthManualOnly": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "publish_requires_non_blocking_tracking_health"
+  },
+  {
+    "name": "publish blocks when tracking health is blocked",
+    "command": "publish",
+    "context": {
+      "trackingHealthPresent": true,
+      "trackingHealthBlocked": true,
+      "trackingHealthManualOnly": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "publish_requires_non_blocking_tracking_health"
+  },
+  {
+    "name": "publish blocks when tracking health is manual-only",
+    "command": "publish",
+    "context": {
+      "trackingHealthPresent": true,
+      "trackingHealthBlocked": false,
+      "trackingHealthManualOnly": true
+    },
+    "expectedBlocked": true,
+    "expectedRule": "publish_requires_non_blocking_tracking_health"
+  },
+  {
+    "name": "publish can proceed with explicit force override",
+    "command": "publish",
+    "context": {
+      "trackingHealthPresent": false,
+      "trackingHealthBlocked": true,
+      "trackingHealthManualOnly": false,
+      "overrideUsed": true
+    },
+    "expectedBlocked": false,
+    "expectedRule": null
+  },
+  {
+    "name": "tracking health audit blocks deployment commands by default",
+    "command": "sync",
+    "context": {
+      "scenario": "tracking_health_audit",
+      "userExplicitOverride": false
+    },
+    "expectedBlocked": true,
+    "expectedRule": "tracking_health_audit_blocks_deployment_commands"
+  },
+  {
+    "name": "tracking health audit allows deployment commands with explicit override",
+    "command": "sync",
+    "context": {
+      "scenario": "tracking_health_audit",
+      "userExplicitOverride": true
+    },
+    "expectedBlocked": false,
+    "expectedRule": null
+  }
+]

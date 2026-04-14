@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import http from 'node:http';
@@ -12,6 +13,10 @@ const DEFAULT_FAMILY_NAME = 'event-tracking-skill';
 const DEFAULT_REPOSITORY = 'jtrackingai/event-tracking-skill';
 const DEFAULT_VERSION_URL = 'https://raw.githubusercontent.com/jtrackingai/event-tracking-skill/main/VERSION';
 const DEFAULT_TARBALL_URL = 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/heads/main';
+
+function buildTaggedTarballUrl(repository, version) {
+  return `https://codeload.github.com/${repository}/tar.gz/refs/tags/v${version}`;
+}
 
 function readJsonIfExists(filePath) {
   if (!fs.existsSync(filePath)) {
@@ -144,6 +149,7 @@ function loadInstallContext(metaUrl) {
 function resolveUpdateSource(bundleMetadata, installMetadata) {
   const source = {
     provider: 'github-tarball',
+    repository: bundleMetadata.repository || DEFAULT_REPOSITORY,
     versionUrl: process.env.EVENT_TRACKING_UPDATE_VERSION_URL
       || installMetadata?.updateSource?.versionUrl
       || bundleMetadata.updateSource?.versionUrl
@@ -152,9 +158,59 @@ function resolveUpdateSource(bundleMetadata, installMetadata) {
       || installMetadata?.updateSource?.tarballUrl
       || bundleMetadata.updateSource?.tarballUrl
       || DEFAULT_TARBALL_URL,
+    tarballSha256: process.env.EVENT_TRACKING_UPDATE_TARBALL_SHA256
+      || installMetadata?.updateSource?.tarballSha256
+      || bundleMetadata.updateSource?.tarballSha256
+      || null,
   };
 
   return source;
+}
+
+function validateUpdateUrl(url, label) {
+  const parsed = new URL(url);
+  if (parsed.protocol === 'https:') {
+    return;
+  }
+
+  if (parsed.protocol === 'file:' && process.env.EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE === '1') {
+    return;
+  }
+
+  if (parsed.protocol === 'file:') {
+    throw new Error(`Refusing ${label} URL with file: protocol unless EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE=1.`);
+  }
+
+  throw new Error(`Unsupported ${label} URL protocol: ${parsed.protocol}. Only https is allowed for updater sources.`);
+}
+
+function resolvePinnedTarballUrl(source, latestVersion) {
+  if (
+    source.provider === 'github-tarball'
+    && source.tarballUrl === DEFAULT_TARBALL_URL
+    && parseSemver(latestVersion)
+  ) {
+    return buildTaggedTarballUrl(source.repository || DEFAULT_REPOSITORY, latestVersion.trim());
+  }
+
+  return source.tarballUrl;
+}
+
+function sha256File(filePath) {
+  const hash = crypto.createHash('sha256');
+  hash.update(fs.readFileSync(filePath));
+  return hash.digest('hex');
+}
+
+function verifyFileSha256(filePath, expectedSha256, label = path.basename(filePath)) {
+  if (!expectedSha256) {
+    return;
+  }
+
+  const actualSha256 = sha256File(filePath);
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(`SHA256 mismatch for ${label}. Expected ${expectedSha256}, got ${actualSha256}.`);
+  }
 }
 
 function isRepoLocalDevelopmentBundle(bundleDir) {
@@ -422,7 +478,10 @@ async function checkForUpdates(metaUrl, options = {}) {
   }
 
   try {
+    validateUpdateUrl(source.versionUrl, 'version');
     const latestVersion = (await requestUrl(source.versionUrl, DEFAULT_TIMEOUT_MS)).trim();
+    const pinnedTarballUrl = resolvePinnedTarballUrl(source, latestVersion);
+    validateUpdateUrl(pinnedTarballUrl, 'tarball');
     const checkedAt = new Date().toISOString();
     const updateAvailable = compareVersions(installedVersion, latestVersion) < 0;
     const result = {
@@ -436,7 +495,10 @@ async function checkForUpdates(metaUrl, options = {}) {
       selectedBundles: installState.selectedBundles,
       updateCommand: `node ${JSON.stringify(path.join(context.bundleDir, 'runtime', 'skill-runtime', 'self-update.mjs'))} --apply`,
       targetDir: installState.targetDir,
-      updateSource: source,
+      updateSource: {
+        ...source,
+        tarballUrl: pinnedTarballUrl,
+      },
     };
     writeJson(context.paths.updateStateFile, result);
     return result;
@@ -475,8 +537,11 @@ export {
   resolveInstallState,
   requestUrl,
   resolveUpdateSource,
+  resolvePinnedTarballUrl,
   runCommand,
+  sha256File,
   shouldUseCache,
+  verifyFileSha256,
   writeJson,
   checkForUpdates,
 };

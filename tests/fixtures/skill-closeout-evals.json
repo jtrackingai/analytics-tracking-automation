@@ -1,0 +1,65 @@
+[
+  {
+    "phase": "tracking-discover",
+    "expectedShape": [
+      "coverage",
+      "platform",
+      "GTM detection",
+      "warnings",
+      "files and next command"
+    ]
+  },
+  {
+    "phase": "tracking-group",
+    "expectedShape": [
+      "group count",
+      "grouping logic",
+      "compact group table",
+      "files and next command"
+    ]
+  },
+  {
+    "phase": "tracking-live-gtm",
+    "expectedShape": [
+      "detected live events",
+      "primary comparison baseline",
+      "issues and evidence split",
+      "files and next command"
+    ]
+  },
+  {
+    "phase": "tracking-schema",
+    "expectedShape": [
+      "Event Table",
+      "Common Properties",
+      "Event-specific Properties",
+      "files and next command"
+    ]
+  },
+  {
+    "phase": "tracking-sync",
+    "expectedShape": [
+      "what was generated or synced",
+      "what still needs confirmation",
+      "manual actions",
+      "files and next command"
+    ]
+  },
+  {
+    "phase": "tracking-verify",
+    "expectedShape": [
+      "verdict",
+      "blockers",
+      "unexpected events",
+      "next action"
+    ]
+  },
+  {
+    "phase": "tracking-shopify",
+    "expectedShape": [
+      "current Shopify-specific output type",
+      "manual install or verification guidance",
+      "files and next action"
+    ]
+  }
+]

@@ -129,6 +129,7 @@ test('portable root installs can check for updates without install metadata', ()
     [path.join(bundleDir, 'runtime', 'skill-runtime', 'update-check.mjs'), '--json', '--force'],
     {
       env: {
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
         EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(versionFile).toString(),
       },
     },
@@ -154,6 +155,7 @@ test('update-check reports update_available when remote VERSION is newer', () =>
     [path.join(bundleDir, 'runtime', 'skill-runtime', 'update-check.mjs'), '--json', '--force'],
     {
       env: {
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
         EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(versionFile).toString(),
       },
     },
@@ -187,6 +189,7 @@ test('self-update reinstalls selected bundles from a newer local tarball source'
     [path.join(bundleDir, 'runtime', 'skill-runtime', 'self-update.mjs'), '--apply', '--force'],
     {
       env: {
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
         EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(path.join(remoteRepoDir, 'VERSION')).toString(),
         EVENT_TRACKING_UPDATE_TARBALL_URL: toFileUrl(tarballFile).toString(),
       },
@@ -221,6 +224,7 @@ test('portable root self-update migrates into installer-managed copy layout', ()
     [path.join(bundleDir, 'runtime', 'skill-runtime', 'self-update.mjs'), '--apply', '--force'],
     {
       env: {
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
         EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(path.join(remoteRepoDir, 'VERSION')).toString(),
         EVENT_TRACKING_UPDATE_TARBALL_URL: toFileUrl(tarballFile).toString(),
       },
@@ -234,4 +238,82 @@ test('portable root self-update migrates into installer-managed copy layout', ()
   assert.equal(updatedMetadata.installMode, 'copy');
   assert.match(updatedSkill, /portable-root-self-update-test/);
   assert.match(updatedSkill, /## Installed Auto-Update/);
+});
+
+test('update-check refuses file-based update sources unless explicitly allowed', () => {
+  const targetDir = makeTempDir('event-tracking-auto-update-file-source-blocked-');
+  installCopiedBundle(targetDir);
+
+  const bundleDir = path.join(targetDir, 'tracking-schema');
+  const versionFile = path.join(makeTempDir('event-tracking-version-source-'), 'VERSION');
+  fs.writeFileSync(versionFile, '9.9.9\n');
+
+  const result = runNode(
+    [path.join(bundleDir, 'runtime', 'skill-runtime', 'update-check.mjs'), '--json', '--force'],
+    {
+      env: {
+        EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(versionFile).toString(),
+      },
+    },
+  );
+
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.status, 'error');
+  assert.match(payload.reason || '', /EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE=1/);
+});
+
+test('update-check pins the default github tarball source to the fetched version tag', () => {
+  const targetDir = makeTempDir('event-tracking-auto-update-tag-pin-');
+  installCopiedBundle(targetDir);
+
+  const bundleDir = path.join(targetDir, 'tracking-schema');
+  const versionFile = path.join(makeTempDir('event-tracking-version-source-'), 'VERSION');
+  fs.writeFileSync(versionFile, '9.9.9\n');
+
+  const result = runNode(
+    [path.join(bundleDir, 'runtime', 'skill-runtime', 'update-check.mjs'), '--json', '--force'],
+    {
+      env: {
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
+        EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(versionFile).toString(),
+      },
+    },
+  );
+
+  const payload = JSON.parse(result.stdout);
+  assert.equal(payload.latestVersion, '9.9.9');
+  assert.equal(payload.updateSource.tarballUrl, 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/tags/v9.9.9');
+});
+
+test('self-update verifies tarball sha256 when provided', () => {
+  const targetDir = makeTempDir('event-tracking-self-update-sha256-');
+  installCopiedBundle(targetDir);
+  const remoteVersion = bumpPatch(repoVersion);
+
+  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-sha-'), 'event-tracking-skill');
+  copyRepoWithoutBuildOutputs(remoteRepoDir);
+  fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
+
+  const tarballFile = path.join(makeTempDir('event-tracking-remote-tarball-sha-'), 'event-tracking-skill.tar.gz');
+  createTarball(remoteRepoDir, tarballFile);
+
+  const bundleDir = path.join(targetDir, 'tracking-schema');
+  const result = spawnSync(
+    'node',
+    [path.join(bundleDir, 'runtime', 'skill-runtime', 'self-update.mjs'), '--apply', '--force'],
+    {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        EVENT_TRACKING_ALLOW_FILE_UPDATE_SOURCE: '1',
+        EVENT_TRACKING_UPDATE_VERSION_URL: toFileUrl(path.join(remoteRepoDir, 'VERSION')).toString(),
+        EVENT_TRACKING_UPDATE_TARBALL_URL: toFileUrl(tarballFile).toString(),
+        EVENT_TRACKING_UPDATE_TARBALL_SHA256: 'deadbeef',
+      },
+    },
+  );
+
+  assert.notEqual(result.status, 0);
+  assert.match(`${result.stdout || ''}${result.stderr || ''}`, /SHA256 mismatch/);
 });
