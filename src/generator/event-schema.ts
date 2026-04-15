@@ -30,4 +30,9 @@ export interface EventSchema {
   events: GA4Event[];
   measurementId?: string;     // GA4 Measurement ID / destination ID (G-XXXXXXXXXX)
   googleTagId?: string;       // Optional Google tag ID (GT-/G-/AW-...), used for the configuration tag when provided
+  artifactSource?: {
+    mode: 'generated' | 'baseline_clone' | 'health_audit_recommendation';
+    reason?: string;
+    derivedFrom?: string[];
+  };
 }

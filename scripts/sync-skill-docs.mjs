@@ -23,7 +23,7 @@ function renderRuntimeSkillMap() {
   const rows = [
     '| Skill | Role | Use When | Typical Stop Point |',
     '| --- | --- | --- | --- |',
-    '| `event-tracking-skill` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |',
+    '| `analytics-tracking-automation` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |',
   ];
 
   for (const [phaseName, phase] of Object.entries(contract.phases)) {
@@ -80,7 +80,7 @@ function renderUserSkillMap() {
   const rows = [
     '| Skill | Best For | What The User Usually Says |',
     '| --- | --- | --- |',
-    '| `event-tracking-skill` | end-to-end routing | "Help me set up or review tracking for this site" |',
+    '| `analytics-tracking-automation` | end-to-end routing | "Help me set up or review tracking for this site" |',
   ];
 
   for (const [phaseName, phase] of Object.entries(contract.phases)) {

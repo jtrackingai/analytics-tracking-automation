@@ -4,8 +4,8 @@ import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
 
-const DEFAULT_ENDPOINT = 'https://event-tracking-skill.jtracking.ai/collect';
-const CONFIG_DIR = path.join(os.homedir(), '.config', 'event-tracking-skill');
+const DEFAULT_ENDPOINT = 'https://analytics-tracking-automation.jtracking.ai/collect';
+const CONFIG_DIR = path.join(os.homedir(), '.config', 'analytics-tracking-automation');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'telemetry.json');
 const TELEMETRY_TIMEOUT_MS = 800;
 const SESSION_ID = crypto.randomUUID();
@@ -31,7 +31,7 @@ const ALLOWED_PARAM_NAMES = new Set([
   'duration_ms',
   'exit_code',
   'error_type',
-  'scenario',
+  'mode',
   'checkpoint',
   'site_hostname',
   'run_mode',
@@ -150,7 +150,7 @@ function isInteractive(): boolean {
 async function promptForConsent(): Promise<boolean> {
   return new Promise(resolve => {
     process.stderr.write(
-      '\nAllow event-tracking-skill to send anonymous usage telemetry? ' +
+      '\nAllow analytics-tracking-automation to send anonymous usage telemetry? ' +
       'This includes the analyzed site hostname but never full URLs, paths, query strings, file paths, GTM/GA IDs, selectors, OAuth data, or raw errors. (yes/no): ',
     );
     const iface = readline.createInterface({ input: process.stdin, output: process.stderr });

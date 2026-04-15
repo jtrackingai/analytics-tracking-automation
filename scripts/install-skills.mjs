@@ -10,18 +10,18 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_UPDATE_SOURCE = {
   provider: 'github-tarball',
-  versionUrl: process.env.EVENT_TRACKING_UPDATE_VERSION_URL || 'https://raw.githubusercontent.com/jtrackingai/event-tracking-skill/main/VERSION',
-  tarballUrl: process.env.EVENT_TRACKING_UPDATE_TARBALL_URL || 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/heads/main',
+  versionUrl: process.env.EVENT_TRACKING_UPDATE_VERSION_URL || 'https://raw.githubusercontent.com/jtrackingai/analytics-tracking-automation/main/VERSION',
+  tarballUrl: process.env.EVENT_TRACKING_UPDATE_TARBALL_URL || 'https://codeload.github.com/jtrackingai/analytics-tracking-automation/tar.gz/refs/heads/main',
 };
 
 function printHelp() {
   console.log(`Usage: node scripts/install-skills.mjs [options]
 
-Install exported event-tracking skill bundles into an agent skills directory.
+Install exported analytics-tracking-automation skill bundles into an agent skills directory.
 
 This installer requires a local checkout of this repository.
 If you do not want a local checkout, use:
-  npx skills add jtrackingai/event-tracking-skill
+  npx skills add jtrackingai/analytics-tracking-automation
 
 Fast paths:
   npm run install:skills
@@ -210,8 +210,8 @@ function injectAfterFrontmatter(content, insertedContent) {
 
 function writeAutoUpdateBootstrap(skillFile, bootstrap) {
   const originalContent = fs.readFileSync(skillFile, 'utf8');
-  const markerStart = '<!-- event-tracking auto-update bootstrap:start -->';
-  const markerEnd = '<!-- event-tracking auto-update bootstrap:end -->';
+  const markerStart = '<!-- analytics-tracking-automation auto-update bootstrap:start -->';
+  const markerEnd = '<!-- analytics-tracking-automation auto-update bootstrap:end -->';
   const markerPattern = new RegExp(`${escapeRegExp(markerStart)}[\\s\\S]*?${escapeRegExp(markerEnd)}\\n?`);
   const nextContent = markerPattern.test(originalContent)
     ? originalContent.replace(markerPattern, `${bootstrap}\n`)
@@ -226,7 +226,7 @@ function buildInstalledAutoUpdateBootstrap(skillFile, scriptDir, selectedBundles
   const refreshedSkill = skillFile;
   const selectedLabel = selectedBundles.join(', ');
   return [
-    '<!-- event-tracking auto-update bootstrap:start -->',
+    '<!-- analytics-tracking-automation auto-update bootstrap:start -->',
     '## Installed Auto-Update',
     '',
     'This installed skill copy can update itself from GitHub before you continue with the workflow.',
@@ -240,7 +240,7 @@ function buildInstalledAutoUpdateBootstrap(skillFile, scriptDir, selectedBundles
     `4. This installed copy updates the same bundle set that was installed together: \`${selectedLabel}\`.`,
     '',
     'If the status is `up_to_date` or `disabled`, continue with the current installed version.',
-    '<!-- event-tracking auto-update bootstrap:end -->',
+    '<!-- analytics-tracking-automation auto-update bootstrap:end -->',
   ].join('\n');
 }
 
@@ -265,7 +265,7 @@ function writeInstallMetadata(targetRoot, bundle, selectedBundles, autoUpdateEna
   };
 
   fs.writeFileSync(
-    path.join(targetPath, '.event-tracking-install.json'),
+    path.join(targetPath, '.analytics-tracking-automation-install.json'),
     `${JSON.stringify(installMetadata, null, 2)}\n`,
   );
 

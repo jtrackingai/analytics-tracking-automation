@@ -4,13 +4,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const SOURCE_SKILL_MANIFEST = 'skills/manifest.json';
-export const SKILL_FAMILY_NAME = 'event-tracking-skill';
-export const SKILL_FAMILY_REPOSITORY = 'jtrackingai/event-tracking-skill';
+export const SKILL_FAMILY_NAME = 'analytics-tracking-automation';
+export const SKILL_FAMILY_REPOSITORY = 'jtrackingai/analytics-tracking-automation';
 export const EXPORT_PROFILE_PORTABLE = 'portable';
 export const EXPORT_PROFILE_CLAWHUB = 'clawhub';
 
-const AUTO_UPDATE_BOOTSTRAP_START = '<!-- event-tracking auto-update bootstrap:start -->';
-const AUTO_UPDATE_BOOTSTRAP_END = '<!-- event-tracking auto-update bootstrap:end -->';
+const AUTO_UPDATE_BOOTSTRAP_START = '<!-- analytics-tracking-automation auto-update bootstrap:start -->';
+const AUTO_UPDATE_BOOTSTRAP_END = '<!-- analytics-tracking-automation auto-update bootstrap:end -->';
 
 function assertNonEmptyString(value, label) {
   if (typeof value !== 'string' || value.trim() === '') {
@@ -190,7 +190,7 @@ function buildPortableAutoUpdateBootstrap(bundleName) {
     '3. If the result status is `update_available`, immediately run `node "<bundle-dir>/runtime/skill-runtime/self-update.mjs" --apply`.',
     '4. If the update succeeds, read `<bundle-dir>/SKILL.md` again before continuing so you are using the refreshed instructions.',
     '5. If the result status is `disabled`, treat this bundle as a local development link or repo checkout and continue without updating.',
-    '6. The updater refreshes this bundle and any sibling event-tracking bundles in the same installed skills directory.',
+    '6. The updater refreshes this bundle and any sibling analytics-tracking-automation bundles in the same installed skills directory.',
     '',
     `${AUTO_UPDATE_BOOTSTRAP_END}`,
     '',

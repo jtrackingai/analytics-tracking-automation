@@ -95,8 +95,8 @@ function buildBundleMetadata(bundle, familyVersion, profile) {
     ...metadata,
     updateSource: {
       provider: 'github-tarball',
-      versionUrl: process.env.EVENT_TRACKING_UPDATE_VERSION_URL || 'https://raw.githubusercontent.com/jtrackingai/event-tracking-skill/main/VERSION',
-      tarballUrl: process.env.EVENT_TRACKING_UPDATE_TARBALL_URL || 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/heads/main',
+      versionUrl: process.env.EVENT_TRACKING_UPDATE_VERSION_URL || 'https://raw.githubusercontent.com/jtrackingai/analytics-tracking-automation/main/VERSION',
+      tarballUrl: process.env.EVENT_TRACKING_UPDATE_TARBALL_URL || 'https://codeload.github.com/jtrackingai/analytics-tracking-automation/tar.gz/refs/heads/main',
     },
   };
 }

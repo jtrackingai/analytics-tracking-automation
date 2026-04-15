@@ -1,0 +1,14 @@
+[
+  {
+    "name": "broad full workflow scope does not equal page-group approval",
+    "request": "帮我跑全流程，直接一路继续。",
+    "checkpoint": "pageGroups",
+    "expectedCanAutoApprove": false
+  },
+  {
+    "name": "broad full workflow scope does not equal schema approval",
+    "request": "Run end-to-end and keep going without stopping.",
+    "checkpoint": "eventSchema",
+    "expectedCanAutoApprove": false
+  }
+]

@@ -217,7 +217,7 @@ export class GTMClient {
       path: `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`,
       requestBody: {
         name: `Preview - ${new Date().toISOString()}`,
-        notes: 'Auto-generated preview version by event-tracking-skill',
+        notes: 'Auto-generated preview version by analytics-tracking-automation',
       },
     });
 
@@ -286,7 +286,7 @@ export class GTMClient {
       parent: `accounts/${accountId}/containers/${containerId}`,
       requestBody: {
         name: `Preview Environment ${workspaceId} ${new Date().toISOString().replace('T', ' ').slice(0, 16)}`,
-        description: 'Created by event-tracking-skill for preview verification',
+        description: 'Created by analytics-tracking-automation for preview verification',
         type: 'workspace',
         workspaceId,
       } as any,
@@ -333,7 +333,7 @@ export class GTMClient {
       path: `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`,
       requestBody: {
         name: versionName || `Published - ${new Date().toISOString()}`,
-        notes: 'Published by event-tracking-skill',
+        notes: 'Published by analytics-tracking-automation',
       },
     });
 

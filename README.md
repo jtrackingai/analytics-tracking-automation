@@ -12,9 +12,9 @@
   <a href="https://www.jtracking.ai/skills">Website</a>
 </p>
 
-# Event Tracking Skill
+# Analytics Tracking Automation
 
-`event-tracking-skill` is a local-first AI skill for planning, reviewing, and delivering GA4 + GTM tracking.
+`analytics-tracking-automation` is a local-first AI skill for planning, reviewing, and delivering GA4 + GTM tracking.
 
 Use it when you want an agent to help with:
 
@@ -48,8 +48,8 @@ Most users only need the umbrella skill.
 Clone the repository locally, then install the skill into your agent skills directory:
 
 ```bash
-git clone https://github.com/jtrackingai/event-tracking-skill.git
-cd event-tracking-skill
+git clone https://github.com/jtrackingai/analytics-tracking-automation.git
+cd analytics-tracking-automation
 npm run install:skills
 ```
 
@@ -58,7 +58,7 @@ npm run install:skills
 If you do not want to clone the repository, install the root skill directly:
 
 ```bash
-npx skills add jtrackingai/event-tracking-skill
+npx skills add jtrackingai/analytics-tracking-automation
 ```
 
 For advanced install options and exported skill bundles:
@@ -74,7 +74,7 @@ If you are publishing this skill to ClawHub, publish the exported public bundle 
 npm run export:skills:clawhub
 ```
 
-Then upload `dist/clawhub-skill-bundles/event-tracking-skill`.
+Then upload `dist/clawhub-skill-bundles/analytics-tracking-automation`.
 
 That public bundle keeps the agent-facing skill docs and references, but strips the bundled auto-update runtime and other maintainer-only packaging files that trigger broader security scans.
 
@@ -100,7 +100,7 @@ For a new setup, the output root is not the artifact directory itself. The agent
 New setup from scratch:
 
 ```text
-Use event-tracking-skill to plan GA4 + GTM tracking for https://www.example.com.
+Use analytics-tracking-automation to plan GA4 + GTM tracking for https://www.example.com.
 Use ./output as the output root; create the site artifact directory under it.
 Start from a fresh run and stop after the event schema is ready for review.
 ```
@@ -108,7 +108,7 @@ Start from a fresh run and stop after the event schema is ready for review.
 New setup with implementation context:
 
 ```text
-Use event-tracking-skill to set up tracking for https://www.example.com.
+Use analytics-tracking-automation to set up tracking for https://www.example.com.
 Use /tmp/output as the output root, so this site's artifacts go under /tmp/output/www_example_com.
 GA4 Measurement ID is G-XXXXXXXXXX.
 We care most about signup, pricing, contact, and demo intent.
@@ -117,7 +117,7 @@ We care most about signup, pricing, contact, and demo intent.
 Audit only:
 
 ```text
-Use event-tracking-skill to run a tracking health audit for https://www.example.com.
+Use analytics-tracking-automation to run a tracking health audit for https://www.example.com.
 I only want to understand the current live GTM setup and whether we should repair or rebuild.
 Do not continue into deployment work.
 ```
@@ -125,7 +125,7 @@ Do not continue into deployment work.
 Routine upkeep:
 
 ```text
-Use event-tracking-skill to do an upkeep review for this existing run:
+Use analytics-tracking-automation to do an upkeep review for this existing run:
 ./output/example_com
 Tell me what is still healthy, what drifted, and what needs repair.
 ```
@@ -133,7 +133,7 @@ Tell me what is still healthy, what drifted, and what needs repair.
 Update an existing artifact:
 
 ```text
-Use event-tracking-skill to resume this artifact directory:
+Use analytics-tracking-automation to resume this artifact directory:
 ./output/example_com
 Tell me the current checkpoint and continue only through schema review.
 ```
@@ -141,7 +141,7 @@ Tell me the current checkpoint and continue only through schema review.
 Page-group review only:
 
 ```text
-Use event-tracking-skill to review and refine the page groups in:
+Use analytics-tracking-automation to review and refine the page groups in:
 ./output/example_com/site-analysis.json
 Focus on business intent, not just URL shape.
 ```
@@ -149,7 +149,7 @@ Focus on business intent, not just URL shape.
 Shopify branch:
 
 ```text
-Use event-tracking-skill for this Shopify storefront:
+Use analytics-tracking-automation for this Shopify storefront:
 https://store.example.com
 I want the Shopify-specific tracking path, not the generic website flow.
 ```
@@ -190,7 +190,7 @@ This skill reflects the implementation workflow behind [JTracking](https://www.j
 
 If you need a more advanced setup, JTracking also supports:
 
-- richer tracking design based on business scenarios
+- richer tracking design based on concrete business flows
 - server-side tracking and custom loaders
 - more destination and ad-platform integrations
 - longer-term tracking operations and maintenance

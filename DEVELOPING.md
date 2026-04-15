@@ -60,6 +60,7 @@ Keep these rules stable unless you intentionally want to change the public surfa
 - conditional gates such as `analyze-live-gtm` before `prepare-schema` must be documented in workflow tables and quick-start snippets, not only in phase skills
 - Playwright-backed commands such as `analyze` and `preview` should be treated as direct non-sandbox execution paths; do not rely on a failed sandbox attempt before rerunning outside it
 - `VERSION` is the shipped skill-family version for installed bundle update checks and should stay aligned with `package.json`
+- `src/gtm/auth.ts` embeds encrypted Google OAuth client metadata; `EMBEDDED_OAUTH_KEY_SEED` is part of that encryption contract and must not be renamed unless the embedded client ID and secret are re-encrypted together
 - copy installs are the supported auto-update path; link installs are intentionally non-updating
 - skill counts and phase names in docs should stay aligned with `skills/manifest.json`
 - documented command snippets, phase-skill artifacts, and local Markdown links should pass the structural harness checks in `npm run check`
@@ -153,3 +154,4 @@ If you change artifact files:
 - confirm installed bundles land in the intended skills target directory
 - confirm any new workflow gate is reflected in both CLI enforcement and `workflow-state.json`
 - confirm any branch-specific changes still describe both `generic` and `shopify` behavior accurately
+- confirm the embedded OAuth regression test still passes if touching `src/gtm/auth.ts` or any embedded OAuth metadata

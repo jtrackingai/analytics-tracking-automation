@@ -15,7 +15,7 @@ const { refreshWorkflowState } = require(path.join(repoRoot, 'dist', 'workflow',
 const { getPageGroupsHash } = require(path.join(repoRoot, 'dist', 'crawler', 'page-analyzer.js'));
 
 function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-test-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-test-'));
 }
 
 function writeJson(file, value) {
@@ -108,6 +108,33 @@ function makeEventSchema() {
     ],
   };
 }
+
+test('workflow state warns when placeholder analysis and derived schema artifacts are present', t => {
+  const artifactDir = makeTempDir();
+  t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
+
+  writeJson(path.join(artifactDir, 'site-analysis.json'), {
+    ...makeSiteAnalysis({ confirmed: true }),
+    artifactSource: {
+      mode: 'placeholder',
+      reason: 'Placeholder analysis created for upkeep continuity.',
+      derivedFrom: ['baseline-event-schema.json'],
+    },
+  });
+  writeJson(path.join(artifactDir, 'event-schema.json'), {
+    ...makeEventSchema(),
+    artifactSource: {
+      mode: 'baseline_clone',
+      reason: 'Current schema was cloned from the last baseline schema.',
+      derivedFrom: ['baseline-event-schema.json'],
+    },
+  });
+
+  const state = refreshWorkflowState(artifactDir);
+
+  assert.match(state.warnings.join('\n'), /placeholder artifact/i);
+  assert.match(state.warnings.join('\n'), /baseline-cloned recommendation/i);
+});
 
 test('workflow state recommends schema preparation after confirmed page groups', t => {
   const artifactDir = makeTempDir();

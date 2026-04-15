@@ -1,7 +1,7 @@
 {
-  "familyName": "event-tracking-skill",
+  "familyName": "analytics-tracking-automation",
   "sourceManifest": "skills/manifest.json",
-  "umbrellaSkill": "event-tracking-skill",
+  "umbrellaSkill": "analytics-tracking-automation",
   "entryIntents": {
     "resume_existing_run": {
       "description": "The user already has an artifact directory or one of its files and wants to continue from the current checkpoint.",
@@ -140,6 +140,31 @@
       ]
     }
   },
+  "approvalSemantics": {
+    "broadWorkflowRequestsDoNotBypassCheckpoints": true,
+    "checkpoints": [
+      {
+        "checkpoint": "pageGroups",
+        "approvalCommand": "confirm-page-groups",
+        "allowAutoYesWithoutCurrentTurnExplicitApproval": false
+      },
+      {
+        "checkpoint": "eventSchema",
+        "approvalCommand": "confirm-schema",
+        "allowAutoYesWithoutCurrentTurnExplicitApproval": false
+      },
+      {
+        "checkpoint": "gtmTargetSelection",
+        "approvalCommand": "sync",
+        "allowAutoSelectionWithoutExplicitIds": false
+      },
+      {
+        "checkpoint": "publish",
+        "approvalCommand": "publish",
+        "allowAutoPublishWithoutCurrentTurnExplicitApproval": false
+      }
+    ]
+  },
   "stopRules": [
     {
       "id": "page_groups_must_be_confirmed",
@@ -197,12 +222,12 @@
         "publish"
       ],
       "blockWhen": {
-        "scenario": "tracking_health_audit",
+        "mode": "tracking_health_audit",
         "userExplicitOverride": false
       },
       "allowOverride": true,
       "overrideFlag": "explicit user override",
-      "stopBoundary": "audit-only scenario"
+      "stopBoundary": "audit-only mode"
     }
   ],
   "phases": {

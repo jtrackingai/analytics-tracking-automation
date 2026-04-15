@@ -1,7 +1,7 @@
 interface:
-  display_name: "Event Tracking Skill"
+  display_name: "Analytics Tracking Automation"
   short_description: "Route chat requests into the right GTM tracking flow"
-  default_prompt: "Use $event-tracking-skill to route or resume the GA4 and GTM tracking workflow for this site. First determine whether this is a new setup, tracking update, upkeep, health audit, analysis-only request, or a resume of an existing artifact directory."
+  default_prompt: "Use $analytics-tracking-automation to route or resume the GA4 and GTM tracking workflow for this site. First determine whether this is a new setup, tracking update, upkeep, health audit, analysis-only request, or a resume of an existing artifact directory."
 
 policy:
   allow_implicit_invocation: true

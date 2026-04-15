@@ -16,13 +16,13 @@ Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only 
 
 This installer path assumes you already cloned this repository locally and are running commands from the repository root.
 
-If you do not want a local checkout, use `npx skills add jtrackingai/event-tracking-skill` on the root skill instead.
+If you do not want a local checkout, use `npx skills add jtrackingai/analytics-tracking-automation` on the root skill instead.
 
 From a local checkout:
 
 ```bash
-git clone https://github.com/jtrackingai/event-tracking-skill.git
-cd event-tracking-skill
+git clone https://github.com/jtrackingai/analytics-tracking-automation.git
+cd analytics-tracking-automation
 npm run install:skills
 ```
 
@@ -111,7 +111,7 @@ npm run install:skills -- --target-dir /tmp/agent-skills
 Install only selected skills:
 
 ```bash
-npm run install:skills -- --skill event-tracking-skill --skill tracking-schema
+npm run install:skills -- --skill analytics-tracking-automation --skill tracking-schema
 ```
 
 Install the full skill family explicitly:
@@ -161,7 +161,7 @@ After that one-time reinstall, normal copy-mode usage can self-check for updates
 
 Default installs should contain:
 
-- `event-tracking-skill`
+- `analytics-tracking-automation`
 
 If you used `--with-phases`, the installed directory should also contain:
 

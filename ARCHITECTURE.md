@@ -2,7 +2,7 @@
 
 Install-facing skill bundles keep the matching runtime reference at [references/architecture.md](references/architecture.md).
 
-`event-tracking-skill` is a local-first tracking workflow system with five layers:
+`analytics-tracking-automation` is a local-first tracking workflow system with five layers:
 
 | Layer | Responsibility | Public Surface |
 | --- | --- | --- |
@@ -12,21 +12,19 @@ Install-facing skill bundles keep the matching runtime reference at [references/
 | Run index layer | Recent run discovery for resume workflows plus per-artifact output-root recovery | `.event-tracking-runs.jsonl` under the output root and `.event-tracking-run.json` inside each artifact directory |
 | Reference layer | Domain rules for crawl, grouping, schema, preview, and Shopify behavior | `references/*.md` |
 
-## Scenario Orchestration
+## Workflow Modes
 
-On top of checkpoint-based execution, the CLI now has scenario orchestration primitives for delivery workflows:
+On top of checkpoint-based execution, the CLI now has workflow mode primitives for delivery workflows:
 
-- explicit scenario run start: `start-scenario`
-- metadata-only scenario relabeling: `scenario`
 - guided templates: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
-- scenario readiness check: `scenario-check`
-- auditable handoff: `scenario-transition`
+- workflow mode readiness via `status --mode-only`
+- auditable handoff recorded in `mode-transitions.jsonl`
 
-Scenario-specific guardrails:
+Mode-specific guardrails:
 
 - `tracking_health_audit` is audit-only by default
-- deployment commands (`generate-gtm`, `sync`, `publish`) are blocked in that scenario unless explicitly overridden
-- scenario report commands are intent-gated to reduce accidental misuse
+- deployment commands (`generate-gtm`, `sync`, `publish`) are blocked in that mode unless explicitly overridden
+- report commands are mode-gated to reduce accidental misuse
 
 ## Public vs Internal Interfaces
 
@@ -119,7 +117,7 @@ It records:
 
 - current checkpoint
 - completed checkpoints
-- scenario, sub-scenario, run ID, run start time, optional input scope
+- mode, sub-mode, run ID, run start time, optional input scope
 - page-group review state
 - live GTM baseline readiness
 - schema review state

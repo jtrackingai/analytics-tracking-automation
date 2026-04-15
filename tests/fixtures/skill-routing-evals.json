@@ -1,7 +1,7 @@
 [
   {
     "name": "new setup from fresh URL starts with discover",
-    "input": "Use event-tracking-skill to set up GA4 and GTM tracking for https://www.example.com from scratch.",
+    "input": "Use analytics-tracking-automation to set up GA4 and GTM tracking for https://www.example.com from scratch.",
     "expectedIntent": "new_setup",
     "expectedEntryCommand": "run-new-setup",
     "expectedPhase": "tracking-discover",
@@ -75,7 +75,7 @@
     "expectedStopBoundary": "preview or explicit publish handoff"
   },
   {
-    "name": "tracking update keeps scenario-first intake",
+    "name": "tracking update keeps mode-first intake",
     "input": "We already have tracking live. Run a tracking update for new CTA flows and revised signup paths.",
     "expectedIntent": "tracking_update",
     "expectedEntryCommand": "run-tracking-update",
@@ -83,7 +83,7 @@
     "expectedStopBoundary": null
   },
   {
-    "name": "upkeep keeps scenario-first intake",
+    "name": "upkeep keeps mode-first intake",
     "input": "Do an upkeep review for this setup and tell me what drifted.",
     "expectedIntent": "upkeep",
     "expectedEntryCommand": "run-upkeep",

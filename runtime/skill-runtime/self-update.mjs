@@ -85,7 +85,7 @@ async function main() {
   const context = loadInstallContext(import.meta.url);
   const installState = resolveInstallState(context);
 
-  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-update-'));
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-update-'));
   const archiveFile = path.join(tempRoot, 'source.tar.gz');
 
   try {

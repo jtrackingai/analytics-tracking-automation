@@ -9,7 +9,7 @@ If you are working in the source repository, the repo-facing companion lives at 
 <!-- contract-generated:runtime-skill-map:start -->
 | Skill | Role | Use When | Typical Stop Point |
 | --- | --- | --- | --- |
-| `event-tracking-skill` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |
+| `analytics-tracking-automation` | umbrella workflow router | the request is end-to-end, ambiguous, or spans multiple phases | whichever checkpoint matches the user intent |
 | `tracking-discover` | analysis bootstrap | the user wants crawl coverage, platform detection, dataLayer discovery, or a fresh artifact directory | site-analysis.json |
 | `tracking-group` | page grouping review | the user wants page-group authoring, grouping adjustments, or page-group approval only | confirmed site-analysis.json |
 | `tracking-live-gtm` | live GTM baseline audit | the user wants to inspect the real live GTM runtime before schema generation or compare multiple live GTM containers | live-gtm-analysis.json and live-gtm-review.md |
@@ -22,9 +22,9 @@ If you are working in the source repository, the repo-facing companion lives at 
 ## Design Rules
 
 - The root skill remains the stable entry point when only one installed skill is available.
-- The root skill owns first-turn conversational intake for chat entry points and should classify requests by user intent before selecting scenario templates or phase skills.
+- The root skill owns first-turn conversational intake for chat entry points and should classify requests by user intent before selecting workflow modes or phase skills.
 - The root skill should stay an umbrella router and shared contract, not a long phase-by-phase runbook.
-- The root skill should not ask the user to choose between internal command names such as `scenario` and `analyze`.
+- The root skill should not ask the user to choose between internal workflow metadata flags and `analyze`.
 - Phase skills should route to one bounded part of the workflow and stop when that phase is complete.
 - Shared mechanics live in the CLI, artifact contract, and root references.
 - Shopify keeps discovery and grouping shared, then takes ownership of the Shopify-specific schema, sync, install, and verification branch behavior.

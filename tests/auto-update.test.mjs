@@ -44,7 +44,7 @@ function installCopiedBundle(targetDir, skillName = 'tracking-schema') {
 }
 
 function installPortableRootSkill(targetDir) {
-  const bundleDir = path.join(targetDir, 'event-tracking-skill');
+  const bundleDir = path.join(targetDir, 'analytics-tracking-automation');
   copyRepoWithoutBuildOutputs(bundleDir);
   return bundleDir;
 }
@@ -105,7 +105,7 @@ test('copy install injects auto-update bootstrap and metadata', () => {
   installCopiedBundle(targetDir);
 
   const bundleDir = path.join(targetDir, 'tracking-schema');
-  const metadata = readJson(path.join(bundleDir, '.event-tracking-install.json'));
+  const metadata = readJson(path.join(bundleDir, '.analytics-tracking-automation-install.json'));
   const skillContent = fs.readFileSync(path.join(bundleDir, 'SKILL.md'), 'utf8');
 
   assert.equal(metadata.autoUpdateEnabled, true);
@@ -126,7 +126,7 @@ test('portable root installs can check for updates without install metadata', ()
   assert.match(skillContent, /## Auto-Update/);
   assert.doesNotMatch(skillContent, /~\/\.codex\/skills/);
   assert.match(skillContent, /configured by your agent environment/);
-  assert.equal(fs.existsSync(path.join(bundleDir, '.event-tracking-install.json')), false);
+  assert.equal(fs.existsSync(path.join(bundleDir, '.analytics-tracking-automation-install.json')), false);
 
   const result = runNode(
     [path.join(bundleDir, 'runtime', 'skill-runtime', 'update-check.mjs'), '--json', '--force'],
@@ -142,7 +142,7 @@ test('portable root installs can check for updates without install metadata', ()
   assert.equal(payload.status, 'update_available');
   assert.equal(payload.installMode, 'portable');
   assert.equal(payload.latestVersion, '9.9.9');
-  assert.deepEqual(payload.selectedBundles, ['event-tracking-skill']);
+  assert.deepEqual(payload.selectedBundles, ['analytics-tracking-automation']);
   assert.match(payload.updateCommand, /self-update\.mjs"\s+--apply|self-update\.mjs\s+--apply/);
 });
 
@@ -175,7 +175,7 @@ test('self-update reinstalls selected bundles from a newer local tarball source'
   installCopiedBundle(targetDir);
   const remoteVersion = bumpPatch(repoVersion);
 
-  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-'), 'event-tracking-skill');
+  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-'), 'analytics-tracking-automation');
   copyRepoWithoutBuildOutputs(remoteRepoDir);
   fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
   fs.writeFileSync(
@@ -184,7 +184,7 @@ test('self-update reinstalls selected bundles from a newer local tarball source'
       .replace('# Tracking Schema', '# Tracking Schema\n\nUpdated marker: runtime-self-update-test'),
   );
 
-  const tarballFile = path.join(makeTempDir('event-tracking-remote-tarball-'), 'event-tracking-skill.tar.gz');
+  const tarballFile = path.join(makeTempDir('event-tracking-remote-tarball-'), 'analytics-tracking-automation.tar.gz');
   createTarball(remoteRepoDir, tarballFile);
 
   const bundleDir = path.join(targetDir, 'tracking-schema');
@@ -199,7 +199,7 @@ test('self-update reinstalls selected bundles from a newer local tarball source'
     },
   );
 
-  const updatedMetadata = readJson(path.join(bundleDir, '.event-tracking-install.json'));
+  const updatedMetadata = readJson(path.join(bundleDir, '.analytics-tracking-automation-install.json'));
   const updatedSkill = fs.readFileSync(path.join(bundleDir, 'SKILL.md'), 'utf8');
 
   assert.equal(updatedMetadata.installedVersion, remoteVersion);
@@ -211,16 +211,16 @@ test('portable root self-update migrates into installer-managed copy layout', ()
   const bundleDir = installPortableRootSkill(targetDir);
   const remoteVersion = bumpPatch(repoVersion);
 
-  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-root-repo-'), 'event-tracking-skill');
+  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-root-repo-'), 'analytics-tracking-automation');
   copyRepoWithoutBuildOutputs(remoteRepoDir);
   fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
   fs.writeFileSync(
     path.join(remoteRepoDir, 'SKILL.md'),
     fs.readFileSync(path.join(remoteRepoDir, 'SKILL.md'), 'utf8')
-      .replace('# Event Tracking Skill', '# Event Tracking Skill\n\nUpdated marker: portable-root-self-update-test'),
+      .replace('# Analytics Tracking Automation', '# Analytics Tracking Automation\n\nUpdated marker: portable-root-self-update-test'),
   );
 
-  const tarballFile = path.join(makeTempDir('event-tracking-remote-root-tarball-'), 'event-tracking-skill.tar.gz');
+  const tarballFile = path.join(makeTempDir('event-tracking-remote-root-tarball-'), 'analytics-tracking-automation.tar.gz');
   createTarball(remoteRepoDir, tarballFile);
 
   runNode(
@@ -234,7 +234,7 @@ test('portable root self-update migrates into installer-managed copy layout', ()
     },
   );
 
-  const updatedMetadata = readJson(path.join(bundleDir, '.event-tracking-install.json'));
+  const updatedMetadata = readJson(path.join(bundleDir, '.analytics-tracking-automation-install.json'));
   const updatedSkill = fs.readFileSync(path.join(bundleDir, 'SKILL.md'), 'utf8');
 
   assert.equal(updatedMetadata.installedVersion, remoteVersion);
@@ -285,7 +285,7 @@ test('update-check pins the default github tarball source to the fetched version
 
   const payload = JSON.parse(result.stdout);
   assert.equal(payload.latestVersion, '9.9.9');
-  assert.equal(payload.updateSource.tarballUrl, 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/tags/v9.9.9');
+  assert.equal(payload.updateSource.tarballUrl, 'https://codeload.github.com/jtrackingai/analytics-tracking-automation/tar.gz/refs/tags/v9.9.9');
 });
 
 test('self-update verifies tarball sha256 when provided', () => {
@@ -293,11 +293,11 @@ test('self-update verifies tarball sha256 when provided', () => {
   installCopiedBundle(targetDir);
   const remoteVersion = bumpPatch(repoVersion);
 
-  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-sha-'), 'event-tracking-skill');
+  const remoteRepoDir = path.join(makeTempDir('event-tracking-remote-repo-sha-'), 'analytics-tracking-automation');
   copyRepoWithoutBuildOutputs(remoteRepoDir);
   fs.writeFileSync(path.join(remoteRepoDir, 'VERSION'), `${remoteVersion}\n`);
 
-  const tarballFile = path.join(makeTempDir('event-tracking-remote-tarball-sha-'), 'event-tracking-skill.tar.gz');
+  const tarballFile = path.join(makeTempDir('event-tracking-remote-tarball-sha-'), 'analytics-tracking-automation.tar.gz');
   createTarball(remoteRepoDir, tarballFile);
 
   const bundleDir = path.join(targetDir, 'tracking-schema');

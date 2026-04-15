@@ -9,10 +9,10 @@ import https from 'node:https';
 
 const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 30 * 1000;
-const DEFAULT_FAMILY_NAME = 'event-tracking-skill';
-const DEFAULT_REPOSITORY = 'jtrackingai/event-tracking-skill';
-const DEFAULT_VERSION_URL = 'https://raw.githubusercontent.com/jtrackingai/event-tracking-skill/main/VERSION';
-const DEFAULT_TARBALL_URL = 'https://codeload.github.com/jtrackingai/event-tracking-skill/tar.gz/refs/heads/main';
+const DEFAULT_FAMILY_NAME = 'analytics-tracking-automation';
+const DEFAULT_REPOSITORY = 'jtrackingai/analytics-tracking-automation';
+const DEFAULT_VERSION_URL = 'https://raw.githubusercontent.com/jtrackingai/analytics-tracking-automation/main/VERSION';
+const DEFAULT_TARBALL_URL = 'https://codeload.github.com/jtrackingai/analytics-tracking-automation/tar.gz/refs/heads/main';
 
 function buildTaggedTarballUrl(repository, version) {
   return `https://codeload.github.com/${repository}/tar.gz/refs/tags/v${version}`;
@@ -86,8 +86,8 @@ function getRuntimePaths(bundleDir) {
     skillFile: path.join(bundleDir, 'SKILL.md'),
     versionFile: path.join(bundleDir, 'VERSION'),
     bundleMetadataFile: path.join(bundleDir, 'bundle.json'),
-    installMetadataFile: path.join(bundleDir, '.event-tracking-install.json'),
-    updateStateFile: path.join(bundleDir, '.event-tracking-update-state.json'),
+    installMetadataFile: path.join(bundleDir, '.analytics-tracking-automation-install.json'),
+    updateStateFile: path.join(bundleDir, '.analytics-tracking-automation-update-state.json'),
   };
 }
 

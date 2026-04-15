@@ -261,10 +261,10 @@ const contractMarkdownFiles = [
   ...phaseSkillFiles,
 ];
 
-const tempInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-install-'));
-const tempSingleSkillInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-single-install-'));
-const tempFullInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-full-install-'));
-const tempLinkInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-skill-link-install-'));
+const tempInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-install-'));
+const tempSingleSkillInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-single-install-'));
+const tempFullInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-full-install-'));
+const tempLinkInstallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'analytics-tracking-automation-link-install-'));
 
 runStep('Build CLI', 'npm', ['run', 'build']);
 runStep('Run automated tests', 'npm', ['run', 'test:built']);
@@ -333,7 +333,7 @@ assertFileDoesNotContain('SKILL.md', '## Phase Contracts', 'Keep the root skill 
 assertFileContains('SKILL.md', 'compatibility:', 'Root skill frontmatter should declare runtime compatibility and capability notes.');
 assertFileDoesNotContain('SKILL.md', '~/.codex/skills', 'Root skill guidance should avoid explicit hidden home-directory paths.');
 assertFileDoesNotContain('docs/README.install.md', '~/.codex/skills', 'Install docs should avoid explicit hidden home-directory paths in user-facing guidance.');
-assertFileDoesNotContain('README.md', './event-tracking scenario <artifact-dir>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
+assertFileDoesNotContain('README.md', './event-tracking mode <artifact-dir>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking sync <artifact-dir>/gtm-config.json --dry-run', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json --gtm-id GTM-XXXXXXX[,GTM-YYYYYYY]', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json --baseline <previous-tracking-health.json>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
@@ -361,7 +361,7 @@ exportedBundleFiles.forEach(relativePath => {
   assertFileDoesNotContain(relativePath, './event-tracking', 'Exported bundles should use the public command name.');
 });
 assertFileExists(
-  path.join(path.relative(repoRoot, tempInstallDir), 'event-tracking-skill', 'SKILL.md'),
+  path.join(path.relative(repoRoot, tempInstallDir), 'analytics-tracking-automation', 'SKILL.md'),
   'Default installs should keep the install surface minimal by installing the umbrella skill.',
 );
 assertFileMissing(
@@ -369,11 +369,11 @@ assertFileMissing(
   'Default installs should not silently include phase skills.',
 );
 assertFileExists(
-  path.join(path.relative(repoRoot, tempSingleSkillInstallDir), 'tracking-schema', '.event-tracking-install.json'),
+  path.join(path.relative(repoRoot, tempSingleSkillInstallDir), 'tracking-schema', '.analytics-tracking-automation-install.json'),
   'Explicit single-skill installs should inject per-bundle auto-update metadata.',
 );
 assertJsonField(
-  path.join(path.relative(repoRoot, tempSingleSkillInstallDir), 'tracking-schema', '.event-tracking-install.json'),
+  path.join(path.relative(repoRoot, tempSingleSkillInstallDir), 'tracking-schema', '.analytics-tracking-automation-install.json'),
   'autoUpdateEnabled',
   value => value === true,
   'Explicit single-skill installs should enable installed auto-update metadata.',
@@ -395,15 +395,15 @@ const exportedSkillContent = fs.readFileSync(
   'utf8',
 );
 const exportedRootSkillContent = fs.readFileSync(
-  path.join(repoRoot, 'dist', 'skill-bundles', 'event-tracking-skill', 'SKILL.md'),
+  path.join(repoRoot, 'dist', 'skill-bundles', 'analytics-tracking-automation', 'SKILL.md'),
   'utf8',
 );
 const clawhubExportedRootSkillContent = fs.readFileSync(
-  path.join(repoRoot, getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'SKILL.md'),
+  path.join(repoRoot, getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'SKILL.md'),
   'utf8',
 );
 const clawhubExportedRootBundleMetadata = readJson(
-  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'bundle.json'),
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'bundle.json'),
 );
 if (!exportedSkillContent.includes('## Auto-Update')) {
   console.error('Check failed: exported bundles should ship the portable Auto-Update bootstrap.');
@@ -422,12 +422,12 @@ if (exportedSkillContent.includes('~/.codex/skills')) {
   process.exit(1);
 }
 assertResolvesTo(
-  path.join(path.relative(repoRoot, tempLinkInstallDir), 'event-tracking-skill'),
-  path.join(repoRoot, 'dist', 'skill-bundles', 'event-tracking-skill'),
+  path.join(path.relative(repoRoot, tempLinkInstallDir), 'analytics-tracking-automation'),
+  path.join(repoRoot, 'dist', 'skill-bundles', 'analytics-tracking-automation'),
   'Link-mode installs should resolve back to the exported bundle path.',
 );
 const linkedSkillContent = fs.readFileSync(
-  path.join(tempLinkInstallDir, 'event-tracking-skill', 'SKILL.md'),
+  path.join(tempLinkInstallDir, 'analytics-tracking-automation', 'SKILL.md'),
   'utf8',
 );
 if (linkedSkillContent.includes('## Installed Auto-Update')) {
@@ -447,12 +447,12 @@ if ('updateSource' in clawhubExportedRootBundleMetadata) {
   process.exit(1);
 }
 assertFileMissing(
-  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'event-tracking-skill', 'runtime', 'skill-runtime', 'update-check.mjs'),
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'runtime', 'skill-runtime', 'update-check.mjs'),
   'ClawHub exports should not ship the updater runtime.',
 );
 [
-  'event-tracking-skill/references/architecture.md',
-  'event-tracking-skill/references/skill-map.md',
+  'analytics-tracking-automation/references/architecture.md',
+  'analytics-tracking-automation/references/skill-map.md',
 ].forEach(relativePath => {
   assertFileExists(path.join(path.relative(repoRoot, tempInstallDir), relativePath), 'Installed umbrella bundles should keep their reference files.');
 });

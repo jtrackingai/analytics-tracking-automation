@@ -24,9 +24,9 @@ export interface SyncResult {
 const MANAGED_NAME_PREFIX = JTRACKING_PREFIX;
 const LEGACY_MANAGED_TAG_PREFIX = 'GA4 - ';
 const LEGACY_MANAGED_TRIGGER_PREFIX = 'Trigger - ';
-const MANAGED_TAG_NOTE = 'managed-by-event-tracking-skill:tag';
-const MANAGED_TRIGGER_NOTE = 'managed-by-event-tracking-skill:trigger';
-const MANAGED_VARIABLE_NOTE = 'managed-by-event-tracking-skill';
+const MANAGED_TAG_NOTE = 'managed-by-analytics-tracking-automation:tag';
+const MANAGED_TRIGGER_NOTE = 'managed-by-analytics-tracking-automation:trigger';
+const MANAGED_VARIABLE_NOTE = 'managed-by-analytics-tracking-automation';
 
 type IdMap = Map<string, string>;
 

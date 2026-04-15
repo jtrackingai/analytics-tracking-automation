@@ -105,10 +105,11 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   const skillMapRef = readText('references/skill-map.md');
 
   assert.match(rootSkill, /## Conversation Intake/, 'Root skill should define a conversation-first intake section for chat entry.');
-  assert.match(rootSkill, /Do not ask the user to choose between `scenario` and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
+  assert.match(rootSkill, /Do not ask the user to choose between internal workflow metadata flags and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
   assert.match(rootSkill, /## Routing Rules/, 'Root skill should keep routing rules explicit.');
   assert.match(rootSkill, /track(?:ing)?-shopify|`tracking-shopify`/, 'Root skill should mention the Shopify phase skill.');
   assert.match(rootSkill, /Do not continue past the phase boundary the user asked for\./, 'Root skill should keep a phase stop rule.');
+  assert.match(rootSkill, /broad request such as "full workflow", "全流程", "end-to-end", or "continue all the way" is scope authorization only/i, 'Root skill should make checkpoint approvals independent from broad workflow scope.');
   assert.match(rootSkill, /Use `\.\/event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear\./, 'Root skill should keep the status entry point visible.');
   assert.match(rootSkill, /\[skill-map\.md\]\(references\/skill-map\.md\)/, 'Root skill should reference the install-shaped skill map path directly.');
   assert.match(rootSkill, /\[architecture\.md\]\(references\/architecture\.md\)/, 'Root skill should reference the install-shaped architecture path directly.');
@@ -156,7 +157,7 @@ test('Shared install docs cover the default minimal install and optional phase i
 
 test('portable and ClawHub export profiles keep different packaging boundaries', () => {
   const manifest = loadSourceSkillManifest(repoRoot);
-  const rootBundle = manifest.bundles.find(bundle => bundle.name === 'event-tracking-skill');
+  const rootBundle = manifest.bundles.find(bundle => bundle.name === 'analytics-tracking-automation');
 
   assert.ok(rootBundle, 'Source manifest should include the umbrella skill bundle.');
   assert.ok(
@@ -187,7 +188,7 @@ test('portable and ClawHub export profiles keep different packaging boundaries',
     'ClawHub exports should not include runtime files.',
   );
   assert.ok(
-    clawhubFiles.some(relativePath => relativePath.startsWith('dist/clawhub-skill-bundles/event-tracking-skill/')),
+    clawhubFiles.some(relativePath => relativePath.startsWith('dist/clawhub-skill-bundles/analytics-tracking-automation/')),
     'ClawHub exports should use the dedicated publish directory.',
   );
 });

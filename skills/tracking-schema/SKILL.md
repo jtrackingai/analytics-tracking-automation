@@ -57,6 +57,8 @@ During review:
 - default to a compact tracking-plan summary in this order: `Event Table`, `Common Properties`, `Event-specific Properties`
 - keep long parameter inventories out of the main event table
 - stop for user approval before GTM generation
+- a broad request such as "full workflow" or "全流程" does not count as schema approval
+- do not run `./event-tracking confirm-schema <artifact-dir>/event-schema.json --yes` on the user's behalf unless the user explicitly confirms the schema and parameters in the current turn
 
 ## Required Output
 
@@ -79,6 +81,8 @@ Produce and share:
 ## Stop Boundary
 
 Stop after schema approval.
+
+Do not continue into `generate-gtm` from a broad workflow request alone. The user must explicitly approve the current `event-schema.json` and its parameters first.
 
 Default next phase:
 
