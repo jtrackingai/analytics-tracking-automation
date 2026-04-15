@@ -115,6 +115,8 @@ If only the root skill is available, follow the same routing logic directly and 
   - GTM target selection (account/container/workspace during `sync`)
   - publish decision (before `publish`)
 - If confirmation is missing or ambiguous, stop and ask; do not auto-proceed.
+- A broad request such as "full workflow", "全流程", "end-to-end", or "continue all the way" is scope authorization only. It does not count as checkpoint approval.
+- Never record checkpoint approval on the user's behalf with `confirm-page-groups --yes` or `confirm-schema --yes` unless the user explicitly confirms that checkpoint in the current turn.
 - When live GTM containers are detected on the site, do not bypass the live baseline review before schema generation.
 - Do not bypass schema approval before `generate-gtm` unless the user explicitly wants `--force`.
 - Treat preview QA and publish as separate decisions.

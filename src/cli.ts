@@ -22,7 +22,13 @@ import { validateEventSchema, getQuotaSummary } from './generator/schema-validat
 import { buildSchemaContext } from './generator/schema-context';
 import { buildExistingTrackingBaseline, compareSchemaToLiveTracking } from './generator/live-tracking-insights';
 import { checkSelectors } from './generator/selector-check';
-import { PreviewResult, runPreviewVerification, runLiveVerification, checkGTMOnPage } from './gtm/preview';
+import {
+  PreviewResult,
+  runPreviewVerification,
+  runLiveVerification,
+  checkGTMOnPages,
+  getSchemaRelevantPageUrls,
+} from './gtm/preview';
 import { generatePreviewReport } from './reporter/preview-report';
 import { generateTrackingPlanComparisonReport } from './reporter/tracking-plan-comparison';
 import { TRACKING_HEALTH_REPORT_FILE, writeTrackingHealthReportMarkdown } from './reporter/tracking-health-report';
@@ -2514,63 +2520,97 @@ program
     }
 
     // ── GTM container check ────────────────────────────────────────────────
-    console.log(`\n🔍 Checking GTM container on site...`);
-    const gtmCheck = await checkGTMOnPage(siteAnalysis.rootUrl, gtmPublicId);
+    let sharedBrowser: Awaited<ReturnType<(typeof import('playwright'))['chromium']['launch']>> | null = null;
+    let previewResult: PreviewResult;
+    try {
+      const { chromium } = await import('playwright');
+      sharedBrowser = await chromium.launch({ headless: true });
 
-    let injectGTM = false;
+      const preflightUrls = getSchemaRelevantPageUrls(siteAnalysis, schema);
+      console.log(`\n🔍 Checking GTM container on ${preflightUrls.length} preview-relevant page${preflightUrls.length > 1 ? 's' : ''}...`);
+      const gtmChecks = await checkGTMOnPages(preflightUrls, gtmPublicId);
+      const loadedChecks = gtmChecks.filter(result => result.pageLoaded);
+      const failedChecks = gtmChecks.filter(result => !result.pageLoaded);
+      const hasExpectedContainerOnAnyPage = loadedChecks.some(result => result.hasExpectedContainer);
+      const observedContainerIds = Array.from(new Set(
+        loadedChecks.flatMap(result => result.loadedContainerIds),
+      ));
+      const anyGtmDetected = observedContainerIds.length > 0;
 
-    if (gtmPublicId === 'UNKNOWN') {
-      console.log(`\n⚠️  No GTM public ID found in context. Re-run sync to capture container info.`);
-    } else if (gtmCheck.hasExpectedContainer) {
-      console.log(`\n✅ Container ${gtmPublicId} detected on site. Proceeding with preview.`);
-    } else {
-      if (gtmCheck.siteLoadsGTM) {
-        console.log(`\n⚠️  Site loads GTM, but with a different container: [${gtmCheck.loadedContainerIds.join(', ')}]`);
-        console.log(`   Expected: ${gtmPublicId}`);
-      } else {
-        console.log(`\n⚠️  No GTM container detected on site (${siteAnalysis.rootUrl})`);
+      if (loadedChecks.length === 0) {
+        const firstFailure = failedChecks[0];
+        throw new Error(
+          `Preview preflight failed before verification started: could not load any preview-relevant page`
+          + (firstFailure?.navigationError ? ` (${firstFailure.navigationError})` : ''),
+        );
       }
 
-      console.log(`\nOptions:`);
-      console.log(`  [1] Go back and re-sync to the correct container`);
-      console.log(`  [2] Inject ${gtmPublicId} into the page during preview (simulates GTM being installed)`);
-      const choice = await prompt('\nSelect option (1 or 2): ');
+      let injectGTM = false;
 
-      if (choice === '1') {
-        console.log(`\n💡 Re-run the 'sync' command and select the container that's actually installed on the site.`);
-        if (gtmCheck.siteLoadsGTM) {
-          console.log(`   Site currently uses: ${gtmCheck.loadedContainerIds.join(', ')}`);
+      if (gtmPublicId === 'UNKNOWN') {
+        console.log(`\n⚠️  No GTM public ID found in context. Re-run sync to capture container info.`);
+      } else if (hasExpectedContainerOnAnyPage) {
+        console.log(`\n✅ Container ${gtmPublicId} detected on site. Proceeding with preview.`);
+      } else {
+        if (anyGtmDetected) {
+          console.log(`\n⚠️  Preview-relevant pages load GTM, but with different container(s): [${observedContainerIds.join(', ')}]`);
+          console.log(`   Expected: ${gtmPublicId}`);
+        } else {
+          console.log(`\n⚠️  No GTM container detected on preview-relevant pages.`);
         }
-        await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
-          status: 'cancelled',
-        });
-        return;
-      } else if (choice === '2') {
-        injectGTM = true;
-        console.log(`\n💉 Will inject ${gtmPublicId} during preview.`);
-      } else {
-        console.log(`Invalid choice. Exiting.`);
-        await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
-          status: 'cancelled',
-        });
-        return;
+
+        if (failedChecks.length > 0) {
+          const failedSummary = failedChecks
+            .slice(0, 3)
+            .map(result => `${result.url}${result.navigationError ? ` (${result.navigationError})` : ''}`)
+            .join('\n   - ');
+          console.log(`\n⚠️  Some preview-relevant pages could not be loaded during preflight:`);
+          console.log(`   - ${failedSummary}`);
+        }
+
+        console.log(`\nOptions:`);
+        console.log(`  [1] Go back and re-sync to the correct container`);
+        console.log(`  [2] Inject ${gtmPublicId} into the page during preview (simulates GTM being installed)`);
+        const choice = await prompt('\nSelect option (1 or 2): ');
+
+        if (choice === '1') {
+          console.log(`\n💡 Re-run the 'sync' command and select the container that's actually installed on the site.`);
+          if (anyGtmDetected) {
+            console.log(`   Preview-relevant pages currently use: ${observedContainerIds.join(', ')}`);
+          }
+          await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
+            status: 'cancelled',
+          });
+          return;
+        } else if (choice === '2') {
+          injectGTM = true;
+          console.log(`\n💉 Will inject ${gtmPublicId} during preview.`);
+        } else {
+          console.log(`Invalid choice. Exiting.`);
+          await captureCommandCompleted('preview', commandStartedAt, 'cancelled', {
+            status: 'cancelled',
+          });
+          return;
+        }
       }
+
+      // ─────────────────────────────────────────────────────────────────────
+
+      console.log('\n🔐 Authenticating with Google...');
+      const artifactDir = resolveArtifactDirFromFile(schemaFile);
+      const auth = await getAuthClient(artifactDir);
+      const client = new GTMClient(auth);
+
+      console.log('\n🔬 Running GTM Preview verification...');
+      console.log('   (This may take 2-5 minutes)');
+
+      previewResult = await runPreviewVerification(
+        siteAnalysis, schema, client,
+        accountId, containerId, workspaceId, gtmPublicId, injectGTM, sharedBrowser,
+      );
+    } finally {
+      await sharedBrowser?.close().catch(() => {});
     }
-
-    // ─────────────────────────────────────────────────────────────────────
-
-    console.log('\n🔐 Authenticating with Google...');
-    const artifactDir = resolveArtifactDirFromFile(schemaFile);
-    const auth = await getAuthClient(artifactDir);
-    const client = new GTMClient(auth);
-
-    console.log('\n🔬 Running GTM Preview verification...');
-    console.log('   (This may take 2-5 minutes)');
-
-    const previewResult = await runPreviewVerification(
-      siteAnalysis, schema, client,
-      accountId, containerId, workspaceId, gtmPublicId, injectGTM
-    );
 
     // Generate and save report
     const dir = path.dirname(schemaFile);

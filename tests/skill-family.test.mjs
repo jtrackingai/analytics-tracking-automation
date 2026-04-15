@@ -109,6 +109,7 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   assert.match(rootSkill, /## Routing Rules/, 'Root skill should keep routing rules explicit.');
   assert.match(rootSkill, /track(?:ing)?-shopify|`tracking-shopify`/, 'Root skill should mention the Shopify phase skill.');
   assert.match(rootSkill, /Do not continue past the phase boundary the user asked for\./, 'Root skill should keep a phase stop rule.');
+  assert.match(rootSkill, /broad request such as "full workflow", "全流程", "end-to-end", or "continue all the way" is scope authorization only/i, 'Root skill should make checkpoint approvals independent from broad workflow scope.');
   assert.match(rootSkill, /Use `\.\/event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear\./, 'Root skill should keep the status entry point visible.');
   assert.match(rootSkill, /\[skill-map\.md\]\(references\/skill-map\.md\)/, 'Root skill should reference the install-shaped skill map path directly.');
   assert.match(rootSkill, /\[architecture\.md\]\(references\/architecture\.md\)/, 'Root skill should reference the install-shaped architecture path directly.');

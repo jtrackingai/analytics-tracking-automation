@@ -140,6 +140,31 @@
       ]
     }
   },
+  "approvalSemantics": {
+    "broadWorkflowRequestsDoNotBypassCheckpoints": true,
+    "checkpoints": [
+      {
+        "checkpoint": "pageGroups",
+        "approvalCommand": "confirm-page-groups",
+        "allowAutoYesWithoutCurrentTurnExplicitApproval": false
+      },
+      {
+        "checkpoint": "eventSchema",
+        "approvalCommand": "confirm-schema",
+        "allowAutoYesWithoutCurrentTurnExplicitApproval": false
+      },
+      {
+        "checkpoint": "gtmTargetSelection",
+        "approvalCommand": "sync",
+        "allowAutoSelectionWithoutExplicitIds": false
+      },
+      {
+        "checkpoint": "publish",
+        "approvalCommand": "publish",
+        "allowAutoPublishWithoutCurrentTurnExplicitApproval": false
+      }
+    ]
+  },
   "stopRules": [
     {
       "id": "page_groups_must_be_confirmed",

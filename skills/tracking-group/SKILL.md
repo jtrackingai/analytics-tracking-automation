@@ -41,6 +41,9 @@ Produce and share:
 
 Stop after page-group approval unless the user explicitly asks to continue into schema work.
 
+A broad request such as "full workflow" or "全流程" does not count as page-group approval.
+Do not run `./event-tracking confirm-page-groups <artifact-dir>/site-analysis.json --yes` on the user's behalf unless the user explicitly confirms the current page groups in the current turn.
+
 Useful follow-up:
 
 ```bash

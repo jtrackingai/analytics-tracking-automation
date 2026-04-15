@@ -31,6 +31,12 @@ export interface PreviewResult {
   previewStartedAt: string;
   previewEndedAt: string;
   gtmContainerId: string;
+  timing?: {
+    totalMs: number;
+    quickPreviewMs?: number;
+    previewEnvironmentMs?: number;
+    browserVerificationMs?: number;
+  };
   results: TagVerificationResult[];
   totalSchemaEvents: number;
   totalExpected: number;
@@ -47,6 +53,21 @@ interface BrowserVerificationArgs {
   startedAt?: string;
   gtmScriptUrl?: string | null;
   mapPageUrl?: (url: string) => string;
+  browser?: Browser;
+}
+
+interface PageVerificationPlan {
+  pageAnalysis: SiteAnalysis['pages'][number];
+  applicableEvents: GA4Event[];
+}
+
+function getEventIdentity(event: Pick<GA4Event, 'eventName' | 'triggerType' | 'elementSelector' | 'pageUrlPattern'>): string {
+  return [
+    event.eventName,
+    event.triggerType,
+    event.elementSelector || '',
+    event.pageUrlPattern || '',
+  ].join('::');
 }
 
 function parseGA4Payload(body: string): Record<string, string> {
@@ -114,34 +135,171 @@ export interface GTMCheckResult {
   siteLoadsGTM: boolean;
   loadedContainerIds: string[]; // e.g. ["GTM-ABC123"]
   hasExpectedContainer: boolean;
+  pageLoaded: boolean;
+  navigationError?: string;
 }
 
-export async function checkGTMOnPage(url: string, expectedPublicId: string): Promise<GTMCheckResult> {
+export interface GTMPageCheckResult extends GTMCheckResult {
+  url: string;
+}
+
+const PREVIEW_PREFLIGHT_TIMEOUT_MS = 20000;
+const PREVIEW_PREFLIGHT_FALLBACK_TIMEOUT_MS = 20000;
+const PREVIEW_PREFLIGHT_SETTLE_MS = 1500;
+const PREVIEW_PAGE_TIMEOUT_MS = 30000;
+const PREVIEW_PAGE_FALLBACK_TIMEOUT_MS = 20000;
+const PREVIEW_PAGE_SETTLE_MS = 4000;
+const PREVIEW_RESTORE_TIMEOUT_MS = 10000;
+const PREVIEW_RESTORE_FALLBACK_TIMEOUT_MS = 10000;
+const PREVIEW_RESTORE_SETTLE_MS = 2000;
+
+async function navigateForPreviewPreflight(page: Page, url: string): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: PREVIEW_PREFLIGHT_TIMEOUT_MS });
+    await page.waitForTimeout(PREVIEW_PREFLIGHT_SETTLE_MS);
+  } catch (err) {
+    const message = (err as Error).message || '';
+    if (!message.includes('Timeout')) throw err;
+
+    console.warn(`  Preview preflight timeout on ${url}; retrying with commit fallback.`);
+    await page.goto(url, { waitUntil: 'commit', timeout: PREVIEW_PREFLIGHT_FALLBACK_TIMEOUT_MS });
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(4000);
+  }
+}
+
+async function navigateForPreviewPage(
+  page: Page,
+  url: string,
+  args: {
+    phaseLabel: string;
+    primaryTimeoutMs: number;
+    fallbackTimeoutMs: number;
+    settleMs: number;
+  },
+): Promise<void> {
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: args.primaryTimeoutMs });
+    await page.waitForTimeout(args.settleMs);
+  } catch (err) {
+    const message = (err as Error).message || '';
+    if (!message.includes('Timeout')) throw err;
+
+    console.warn(`  ${args.phaseLabel} timeout on ${url}; retrying with commit fallback.`);
+    await page.goto(url, { waitUntil: 'commit', timeout: args.fallbackTimeoutMs });
+    await page.waitForLoadState('domcontentloaded', { timeout: 10000 }).catch(() => {});
+    await page.waitForTimeout(args.settleMs);
+  }
+}
+
+function mapPreviewPageUrl(originalUrl: string, injectGTM: boolean, previewUrlParams: string | null): string {
+  if (!injectGTM) return originalUrl;
+
+  // Inject mode carries preview auth on the GTM script request. Appending the same
+  // params to the site URL can trigger slow or broken page navigations on some sites.
+  return originalUrl;
+}
+
+export const __testOnly = {
+  navigateForPreviewPreflight,
+  navigateForPreviewPage,
+  mapPreviewPageUrl,
+  clickVisibleMatchAt,
+};
+
+function getManagedPreviewEvents(schema: EventSchema): GA4Event[] {
+  return schema.events.filter(event => !isRedundantAutoEvent(event));
+}
+
+function buildPageVerificationPlan(siteAnalysis: SiteAnalysis, schema: EventSchema): PageVerificationPlan[] {
+  const managedEvents = getManagedPreviewEvents(schema);
+  return siteAnalysis.pages
+    .map(pageAnalysis => ({
+      pageAnalysis,
+      applicableEvents: managedEvents.filter(event => eventAppliesToPage(event, pageAnalysis.url, siteAnalysis.rootUrl)),
+    }))
+    .filter(entry => entry.applicableEvents.length > 0);
+}
+
+export function getSchemaRelevantPageUrls(siteAnalysis: SiteAnalysis, schema: EventSchema, maxPages: number = 6): string[] {
+  const relevantUrls = buildPageVerificationPlan(siteAnalysis, schema)
+    .map(entry => entry.pageAnalysis.url);
+
+  const ordered = [siteAnalysis.rootUrl, ...relevantUrls];
+  return Array.from(new Set(ordered)).slice(0, Math.max(1, maxPages));
+}
+
+export async function checkGTMOnPages(urls: string[], expectedPublicId: string): Promise<GTMPageCheckResult[]> {
   const browser: Browser = await chromium.launch({ headless: true });
-  const loadedContainerIds: string[] = [];
+  const uniqueUrls = Array.from(new Set(urls.filter(Boolean)));
+  const results: GTMPageCheckResult[] = [];
 
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
+    const loadedIdsByUrl = new Map<string, string[]>();
+    let currentUrl = '';
 
     await context.route('**googletagmanager.com/gtm.js**', async (route, request) => {
       const reqUrl = new URL(request.url());
       const id = reqUrl.searchParams.get('id');
-      if (id && !loadedContainerIds.includes(id)) loadedContainerIds.push(id);
+      if (id && currentUrl) {
+        const loadedForUrl = loadedIdsByUrl.get(currentUrl) || [];
+        if (!loadedForUrl.includes(id)) loadedForUrl.push(id);
+        loadedIdsByUrl.set(currentUrl, loadedForUrl);
+      }
       await route.continue();
     });
 
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-    await page.waitForTimeout(3000);
+    for (const url of uniqueUrls) {
+      currentUrl = url;
+      let pageLoaded = false;
+      let navigationError: string | undefined;
+
+      try {
+        await navigateForPreviewPreflight(page, url);
+        pageLoaded = true;
+      } catch (error) {
+        navigationError = (error as Error).message;
+      }
+
+      const loadedContainerIds = loadedIdsByUrl.get(url) || [];
+      results.push({
+        url,
+        siteLoadsGTM: loadedContainerIds.length > 0,
+        loadedContainerIds,
+        hasExpectedContainer: loadedContainerIds.includes(expectedPublicId),
+        pageLoaded,
+        navigationError,
+      });
+    }
+
     await context.close();
   } finally {
     await browser.close();
   }
 
+  return results;
+}
+
+export async function checkGTMOnPage(url: string, expectedPublicId: string): Promise<GTMCheckResult> {
+  const [result] = await checkGTMOnPages([url], expectedPublicId);
+  if (result) {
+    return {
+      siteLoadsGTM: result.siteLoadsGTM,
+      loadedContainerIds: result.loadedContainerIds,
+      hasExpectedContainer: result.hasExpectedContainer,
+      pageLoaded: result.pageLoaded,
+      navigationError: result.navigationError,
+    };
+  }
+
   return {
-    siteLoadsGTM: loadedContainerIds.length > 0,
-    loadedContainerIds,
-    hasExpectedContainer: loadedContainerIds.includes(expectedPublicId),
+    siteLoadsGTM: false,
+    loadedContainerIds: [],
+    hasExpectedContainer: false,
+    pageLoaded: false,
+    navigationError: 'No URL provided for GTM check.',
   };
 }
 
@@ -157,8 +315,104 @@ function eventAppliesToPage(event: GA4Event, pageUrl: string, rootUrl: string): 
   return pageUrl === rootUrl;
 }
 
-async function injectPreviewContainer(page: Page, gtmScriptUrl: string | null, gtmPublicId: string): Promise<void> {
-  if (!gtmScriptUrl || page.isClosed()) return;
+function normalizeComparableUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return url.split('#')[0] || url;
+  }
+}
+
+function isBlockingNavigationError(message: string): boolean {
+  return /ERR_|ENOTFOUND|ECONNREFUSED|ECONNRESET|ETIMEDOUT|Timeout|Navigation timeout|NS_ERROR|net::|certificate|SSL|TLS|Target page, context or browser has been closed/i.test(message);
+}
+
+async function waitForHitCount(
+  getCount: () => number,
+  previousCount: number,
+  timeoutMs: number,
+): Promise<number> {
+  const startedAt = Date.now();
+  let currentCount = getCount();
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (currentCount > previousCount) return currentCount;
+    await new Promise<void>(resolve => setTimeout(resolve, 100));
+    currentCount = getCount();
+  }
+
+  return currentCount;
+}
+
+function getMatchingFiredEvents(event: GA4Event, rootUrl: string, firedEvents: FiredEvent[]): FiredEvent[] {
+  return firedEvents.filter(fe =>
+    fe.eventName === event.eventName && eventAppliesToPage(event, fe.url, rootUrl),
+  );
+}
+
+function getPriorityWeight(priority: GA4Event['priority']): number {
+  switch (priority) {
+    case 'high': return 0;
+    case 'medium': return 1;
+    default: return 2;
+  }
+}
+
+function sortEventsForPreview(events: GA4Event[]): GA4Event[] {
+  return [...events].sort((left, right) => {
+    const priorityDelta = getPriorityWeight(left.priority) - getPriorityWeight(right.priority);
+    if (priorityDelta !== 0) return priorityDelta;
+    return left.eventName.localeCompare(right.eventName);
+  });
+}
+
+async function attemptFormSubmit(page: Page, selector: string): Promise<boolean> {
+  const locator = page.locator(selector);
+  const count = await locator.count().catch(() => 0);
+
+  for (let i = 0; i < Math.min(count, 3); i++) {
+    const candidate = locator.nth(i);
+    const isVisible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
+    if (!isVisible) continue;
+
+    try {
+      await candidate.scrollIntoViewIfNeeded().catch(() => {});
+      await candidate.evaluate((form: Element) => {
+        const target = form as HTMLFormElement;
+        if (typeof target.requestSubmit === 'function') {
+          target.requestSubmit();
+          return;
+        }
+        target.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+      return true;
+    } catch {
+      // Try next visible form candidate.
+    }
+  }
+
+  return false;
+}
+
+async function attemptCustomEventDetection(
+  page: Page,
+  event: GA4Event,
+  rootUrl: string,
+  firedEvents: FiredEvent[],
+  waitMs: number = 800,
+): Promise<number> {
+  const beforeHits = getMatchingFiredEvents(event, rootUrl, firedEvents).length;
+  return waitForHitCount(
+    () => getMatchingFiredEvents(event, rootUrl, firedEvents).length,
+    beforeHits,
+    waitMs,
+  );
+}
+
+async function injectPreviewContainer(page: Page, gtmScriptUrl: string | null, gtmPublicId: string): Promise<boolean> {
+  if (!gtmScriptUrl || page.isClosed()) return false;
 
   await page.evaluate((args: { src: string; containerId: string }) => {
     if ((window as any).google_tag_manager?.[args.containerId]) return;
@@ -170,8 +424,15 @@ async function injectPreviewContainer(page: Page, gtmScriptUrl: string | null, g
     (document.head || document.documentElement).appendChild(s);
   }, { src: gtmScriptUrl, containerId: gtmPublicId }).catch(() => {});
 
-  await new Promise<void>(resolve => setTimeout(resolve, 4000));
-  await page.waitForLoadState('networkidle', { timeout: 4000 }).catch(() => {});
+  const gtmReady = await page.waitForFunction((containerId: string) => {
+    return Boolean((window as any).google_tag_manager?.[containerId]);
+  }, gtmPublicId, { timeout: 2500 }).then(() => true).catch(() => false);
+
+  if (!gtmReady) {
+    await page.waitForLoadState('networkidle', { timeout: 1000 }).catch(() => {});
+  }
+
+  return gtmReady;
 }
 
 async function restoreOriginalPage(
@@ -179,46 +440,80 @@ async function restoreOriginalPage(
   originalPageUrl: string,
   gtmScriptUrl: string | null,
   gtmPublicId: string,
-): Promise<void> {
-  if (page.isClosed()) return;
+): Promise<boolean> {
+  if (page.isClosed()) return false;
 
-  // Always reload before the next synthetic interaction. URL-only checks miss
-  // same-page state changes such as open dialogs, scroll position, or partially
-  // completed form state left behind by previous clicks.
-  await page.goto(originalPageUrl, { waitUntil: 'domcontentloaded', timeout: 10000 }).catch(() => {});
-  await injectPreviewContainer(page, gtmScriptUrl, gtmPublicId);
+  await navigateForPreviewPage(page, originalPageUrl, {
+    phaseLabel: 'Preview restore',
+    primaryTimeoutMs: PREVIEW_RESTORE_TIMEOUT_MS,
+    fallbackTimeoutMs: PREVIEW_RESTORE_FALLBACK_TIMEOUT_MS,
+    settleMs: PREVIEW_RESTORE_SETTLE_MS,
+  });
 
-  if (!gtmScriptUrl) {
-    await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-    await new Promise<void>(resolve => setTimeout(resolve, 500));
+  if (gtmScriptUrl) {
+    return injectPreviewContainer(page, gtmScriptUrl, gtmPublicId);
+  }
+
+  await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {});
+  return true;
+}
+
+async function clickVisibleMatchAt(page: Page, selector: string, candidateIndex: number): Promise<boolean> {
+  const locator = page.locator(selector);
+  const count = await locator.count().catch(() => 0);
+  if (candidateIndex < 0 || candidateIndex >= Math.min(count, 8)) return false;
+
+  const candidate = locator.nth(candidateIndex);
+  const isVisible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
+  if (!isVisible) return false;
+
+  try {
+    await candidate.scrollIntoViewIfNeeded().catch(() => {});
+    await candidate.click({ timeout: 2000, force: false, noWaitAfter: true });
+    return true;
+  } catch {
+    try {
+      await candidate.scrollIntoViewIfNeeded().catch(() => {});
+      await candidate.click({ timeout: 2000, force: true, noWaitAfter: true });
+      return true;
+    } catch {
+      return false;
+    }
   }
 }
 
-async function clickFirstVisibleMatch(page: Page, selector: string): Promise<boolean> {
+async function clickVisibleMatchesUntilEvent(
+  page: Page,
+  selector: string,
+  args: {
+    beforeHits: number;
+    getHitCount: () => number;
+    waitMs: number;
+    eventName: string;
+  },
+): Promise<{ clicked: boolean; afterHits: number }> {
   const locator = page.locator(selector);
   const count = await locator.count().catch(() => 0);
+  const maxAttempts = Math.min(count, 8);
+  let clicked = false;
+  let afterHits = args.beforeHits;
 
-  for (let i = 0; i < Math.min(count, 5); i++) {
-    const candidate = locator.nth(i);
-    const isVisible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
-    if (!isVisible) continue;
+  for (let i = 0; i < maxAttempts; i++) {
+    const attemptClicked = await clickVisibleMatchAt(page, selector, i);
+    if (!attemptClicked) continue;
 
-    try {
-      await candidate.scrollIntoViewIfNeeded().catch(() => {});
-      await candidate.click({ timeout: 2000, force: false, noWaitAfter: true });
-      return true;
-    } catch {
-      try {
-        await candidate.scrollIntoViewIfNeeded().catch(() => {});
-        await candidate.click({ timeout: 2000, force: true, noWaitAfter: true });
-        return true;
-      } catch {
-        // Try the next visible candidate.
-      }
+    clicked = true;
+    afterHits = await waitForHitCount(args.getHitCount, args.beforeHits, args.waitMs);
+    if (afterHits > args.beforeHits) {
+      return { clicked, afterHits };
+    }
+
+    if (maxAttempts > 1 && i < maxAttempts - 1) {
+      console.log(`      schema retry: ${args.eventName} (candidate ${i + 2}/${maxAttempts})`);
     }
   }
 
-  return false;
+  return { clicked, afterHits };
 }
 
 function inferSyntheticInputValue(input: {
@@ -332,11 +627,13 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
   const gtmPublicId = args.gtmPublicId;
   const siteAnalysis = args.siteAnalysis;
   const schema = args.schema;
-  const managedEvents = schema.events.filter(event => !isRedundantAutoEvent(event));
-  const shouldSimulateScroll = managedEvents.some(event => event.triggerType === 'scroll');
+  const managedEvents = getManagedPreviewEvents(schema);
+  const pagesToVerify = buildPageVerificationPlan(siteAnalysis, schema);
+  const browserVerificationStartedAt = Date.now();
 
   const allFiredEvents: FiredEvent[] = [];
-  const browser: Browser = await chromium.launch({ headless: true });
+  const ownsBrowser = !args.browser;
+  const browser: Browser = args.browser || await chromium.launch({ headless: true });
 
   try {
     const context: BrowserContext = await browser.newContext({
@@ -380,25 +677,61 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
       await route.continue().catch(() => {});
     });
 
-    // Visit each page and simulate interactions
-    for (const pageAnalysis of siteAnalysis.pages) {
+    if (pagesToVerify.length === 0) {
+      await context.close().catch(() => {});
+      return {
+        siteUrl: siteAnalysis.rootUrl,
+        previewStartedAt: startedAt,
+        previewEndedAt: new Date().toISOString(),
+        gtmContainerId: gtmPublicId,
+        timing: {
+          totalMs: Date.now() - browserVerificationStartedAt,
+          browserVerificationMs: Date.now() - browserVerificationStartedAt,
+        },
+        results: [],
+        totalSchemaEvents: schema.events.length,
+        totalExpected: 0,
+        totalFired: 0,
+        totalFailed: 0,
+        redundantAutoEventsSkipped: schema.events.length,
+        unexpectedFiredEvents: [],
+      };
+    }
+
+    const remainingEventIds = new Set(managedEvents.map(event => getEventIdentity(event)));
+    const orderedManagedEvents = sortEventsForPreview(managedEvents);
+
+    // Visit only pages that actually have schema events to verify.
+    for (const { pageAnalysis, applicableEvents } of pagesToVerify) {
+      if (remainingEventIds.size === 0) break;
+
       const page = await context.newPage();
       console.log(`  Verifying: ${pageAnalysis.url}`);
 
       try {
-        await page.goto(mapPageUrl(pageAnalysis.url), { waitUntil: 'domcontentloaded', timeout: 30000 });
+        const mappedPageUrl = mapPageUrl(pageAnalysis.url);
+        await navigateForPreviewPage(page, mappedPageUrl, {
+          phaseLabel: 'Preview verification',
+          primaryTimeoutMs: PREVIEW_PAGE_TIMEOUT_MS,
+          fallbackTimeoutMs: PREVIEW_PAGE_FALLBACK_TIMEOUT_MS,
+          settleMs: PREVIEW_PAGE_SETTLE_MS,
+        });
         if (page.isClosed()) continue;
         console.log(`    [page loaded]`);
 
-        // Inject GTM after DOM is ready (so document.head exists for script insertion)
+        let pageReady = true;
         if (gtmScriptUrl) {
-          await injectPreviewContainer(page, gtmScriptUrl, gtmPublicId);
+          pageReady = await injectPreviewContainer(page, gtmScriptUrl, gtmPublicId);
+          if (!pageReady) {
+            throw new Error(`Injected GTM container ${gtmPublicId} did not finish loading on ${pageAnalysis.url}.`);
+          }
           console.log(`    [GTM injected]`);
         } else {
-          await new Promise<void>(resolve => setTimeout(resolve, 2000));
+          await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {});
         }
         if (page.isClosed()) continue;
 
+        const shouldSimulateScroll = applicableEvents.some(event => event.triggerType === 'scroll');
         if (shouldSimulateScroll) {
           console.log(`    [scrolling]`);
           await page.evaluate(() => {
@@ -415,7 +748,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
             });
           }).catch(() => {});
           if (page.isClosed()) continue;
-          await new Promise<void>(resolve => setTimeout(resolve, 1000));
+          await page.waitForLoadState('networkidle', { timeout: 800 }).catch(() => {});
           if (page.isClosed()) continue;
         }
 
@@ -434,100 +767,140 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
         await page.route('**', blockNav);
         page.setDefaultNavigationTimeout(10000);
 
-        const originalPageUrl = mapPageUrl(pageAnalysis.url);
-        const clickableElements = pageAnalysis.elements.filter(e =>
-          e.isVisible &&
-          (e.type === 'button' || e.type === 'link') &&
-          e.text && e.text.length < 80
-        ).slice(0, 5);
-
-        console.log(`    [clicking ${clickableElements.length} elements]`);
-        for (const el of clickableElements) {
-          if (page.isClosed()) break;
-          try {
-            // Always start from original page for each click (avoids pending-navigation state)
-            await restoreOriginalPage(page, originalPageUrl, gtmScriptUrl, gtmPublicId);
-            if (page.isClosed()) break;
-
-            const cssSelector = el.selector.replace(/:contains\(".*?"\)/, '').trim();
-            // Use accessible role + exact name matching to avoid selecting wrong element
-            // when multiple elements share the same CSS selector (e.g. two buttons with same classes)
-            let locator;
-            if (el.text && el.type === 'button') {
-              locator = page.getByRole('button', { name: el.text, exact: true });
-            } else if (el.text && el.type === 'link') {
-              locator = page.getByRole('link', { name: el.text, exact: true });
-            } else {
-              locator = page.locator(cssSelector).first();
-            }
-            const isVisible = await locator.isVisible({ timeout: 3000 }).catch(() => false);
-            if (!isVisible) { console.log(`      skip (not visible): ${el.text?.slice(0, 30)}`); continue; }
-
-            console.log(`      click: ${el.text?.slice(0, 30)}`);
-            await locator.click({ timeout: 2000, force: false, noWaitAfter: true }).catch(() => {});
-            // Pure Node timer — no Playwright calls while page may be navigating
-            await new Promise<void>(resolve => setTimeout(resolve, 800));
-            console.log(`      click done: ${el.text?.slice(0, 30)}`);
-          } catch {
-            // Ignore interaction errors
-          }
-        }
-
-        const schemaClickEvents = managedEvents.filter(event =>
-          event.triggerType === 'click' &&
-          event.elementSelector &&
-          eventAppliesToPage(event, pageAnalysis.url, siteAnalysis.rootUrl)
+        const originalPageUrl = mappedPageUrl;
+        const orderedApplicableEvents = orderedManagedEvents.filter(event =>
+          applicableEvents.some(candidate => getEventIdentity(candidate) === getEventIdentity(event)),
         );
 
-        console.log(`    [schema clicks ${schemaClickEvents.length}]`);
-        for (const event of schemaClickEvents) {
+        console.log(`    [schema events ${orderedApplicableEvents.length}]`);
+        let shouldRestoreBeforeNextEvent = false;
+        for (const event of orderedApplicableEvents) {
           if (page.isClosed()) break;
           try {
-            await restoreOriginalPage(page, originalPageUrl, gtmScriptUrl, gtmPublicId);
-            if (page.isClosed()) break;
+            const eventId = getEventIdentity(event);
+            if (!remainingEventIds.has(eventId)) continue;
 
-            const cleanSelector = event.elementSelector!.replace(/:contains\([^)]*\)/g, '').trim();
-            const beforeHits = allFiredEvents.filter(fe => fe.eventName === event.eventName).length;
-
-            let clicked = await clickFirstVisibleMatch(page, cleanSelector);
-            if (clicked) {
-              await new Promise<void>(resolve => setTimeout(resolve, 1500));
-            }
-
-            let afterHits = allFiredEvents.filter(fe => fe.eventName === event.eventName).length;
-            if (afterHits <= beforeHits) {
-              const filledInputs = await fillNearbyInputsForSelector(page, cleanSelector);
-              if (filledInputs > 0) {
-                console.log(`      schema prepare: ${event.eventName} (filled ${filledInputs} input${filledInputs > 1 ? 's' : ''})`);
-                await new Promise<void>(resolve => setTimeout(resolve, 500));
-                clicked = await clickFirstVisibleMatch(page, cleanSelector) || clicked;
-                if (clicked) {
-                  await new Promise<void>(resolve => setTimeout(resolve, 1500));
-                }
-                afterHits = allFiredEvents.filter(fe => fe.eventName === event.eventName).length;
+            if (
+              (shouldRestoreBeforeNextEvent && event.triggerType !== 'page_view' && event.triggerType !== 'custom') ||
+              normalizeComparableUrl(page.url()) !== normalizeComparableUrl(originalPageUrl)
+            ) {
+              const restored = await restoreOriginalPage(page, originalPageUrl, gtmScriptUrl, gtmPublicId);
+              shouldRestoreBeforeNextEvent = false;
+              if (!restored || page.isClosed()) {
+                throw new Error(`Failed to restore ${pageAnalysis.url} before previewing ${event.eventName}.`);
               }
             }
 
-            if (!clicked) {
-              console.log(`      schema skip: ${event.eventName}`);
-              continue;
+            const beforeHits = getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length;
+            let afterHits = beforeHits;
+            let interactionPerformed = false;
+
+            if (event.triggerType === 'page_view') {
+              afterHits = await waitForHitCount(
+                () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
+                beforeHits,
+                800,
+              );
+              interactionPerformed = true;
+            } else if (event.triggerType === 'custom') {
+              afterHits = await attemptCustomEventDetection(page, event, siteAnalysis.rootUrl, allFiredEvents, 800);
+              interactionPerformed = true;
+            } else if (event.triggerType === 'form_submit' && event.elementSelector) {
+              const cleanSelector = event.elementSelector.replace(/:contains\([^)]*\)/g, '').trim();
+              const filledInputs = await fillNearbyInputsForSelector(page, cleanSelector);
+              if (filledInputs > 0) {
+                console.log(`      schema prepare: ${event.eventName} (filled ${filledInputs} input${filledInputs > 1 ? 's' : ''})`);
+              }
+              const submitted = await attemptFormSubmit(page, cleanSelector);
+              if (!submitted) {
+                console.log(`      schema skip: ${event.eventName}`);
+                continue;
+              }
+              interactionPerformed = true;
+              afterHits = await waitForHitCount(
+                () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
+                beforeHits,
+                1500,
+              );
+            } else if (event.triggerType === 'click' && event.elementSelector) {
+              const cleanSelector = event.elementSelector.replace(/:contains\([^)]*\)/g, '').trim();
+              let { clicked, afterHits: clickHits } = await clickVisibleMatchesUntilEvent(page, cleanSelector, {
+                beforeHits,
+                getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
+                waitMs: 1200,
+                eventName: event.eventName,
+              });
+              afterHits = clickHits;
+              if (clicked) {
+                interactionPerformed = true;
+              }
+
+              if (afterHits <= beforeHits) {
+                const filledInputs = await fillNearbyInputsForSelector(page, cleanSelector);
+                if (filledInputs > 0) {
+                  console.log(`      schema prepare: ${event.eventName} (filled ${filledInputs} input${filledInputs > 1 ? 's' : ''})`);
+                  const retryResult = await clickVisibleMatchesUntilEvent(page, cleanSelector, {
+                    beforeHits,
+                    getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
+                    waitMs: 1500,
+                    eventName: event.eventName,
+                  });
+                  clicked = retryResult.clicked || clicked;
+                  if (clicked) {
+                    interactionPerformed = true;
+                    afterHits = retryResult.afterHits;
+                  }
+                }
+              }
+
+              if (!clicked) {
+                console.log(`      schema skip: ${event.eventName}`);
+                continue;
+              }
+            } else {
+              afterHits = await waitForHitCount(
+                () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
+                beforeHits,
+                800,
+              );
             }
 
             if (afterHits > beforeHits) {
-              console.log(`      schema click: ${event.eventName}`);
+              console.log(`      schema hit: ${event.eventName}`);
+              remainingEventIds.delete(eventId);
             } else {
               console.log(`      schema no hit: ${event.eventName}`);
             }
-          } catch {
-            // Ignore interaction errors
+
+            shouldRestoreBeforeNextEvent = interactionPerformed && (
+              page.isClosed()
+              || normalizeComparableUrl(page.url()) !== normalizeComparableUrl(originalPageUrl)
+            );
+          } catch (error) {
+            const message = (error as Error).message;
+            if (isBlockingNavigationError(message)) {
+              throw error;
+            }
+            console.warn(`      schema error: ${event.eventName}: ${message}`);
+          }
+        }
+
+        for (const event of managedEvents) {
+          const eventId = getEventIdentity(event);
+          if (!remainingEventIds.has(eventId)) continue;
+          const matched = getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents);
+          if (matched.length > 0) {
+            remainingEventIds.delete(eventId);
           }
         }
 
         await page.unroute('**', blockNav).catch(() => {});
-
-        await new Promise<void>(resolve => setTimeout(resolve, 2000));
       } catch (err) {
-        console.warn(`  Warning: Failed to verify ${pageAnalysis.url}: ${(err as Error).message}`);
+        const message = (err as Error).message;
+        if (isBlockingNavigationError(message)) {
+          throw new Error(`Preview aborted on ${pageAnalysis.url}: ${message}`);
+        }
+        console.warn(`  Warning: Failed to verify ${pageAnalysis.url}: ${message}`);
       } finally {
         await page.close().catch(() => {});
       }
@@ -535,12 +908,14 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
 
     await context.close().catch(() => {});
   } finally {
-    await browser.close();
+    if (ownsBrowser) {
+      await browser.close();
+    }
   }
 
   // Match fired events against expected events
   const results: TagVerificationResult[] = managedEvents.map(event => {
-    const matchedFired = allFiredEvents.filter(fe => fe.eventName === event.eventName);
+    const matchedFired = getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents);
     const fired = matchedFired.length > 0;
 
     return {
@@ -562,12 +937,17 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
 
   const totalFired = results.filter(r => r.fired).length;
   const totalFailed = results.filter(r => !r.fired).length;
+  const browserVerificationMs = Date.now() - browserVerificationStartedAt;
 
   return {
     siteUrl: siteAnalysis.rootUrl,
     previewStartedAt: startedAt,
     previewEndedAt: new Date().toISOString(),
     gtmContainerId: gtmPublicId,
+    timing: {
+      totalMs: browserVerificationMs,
+      browserVerificationMs,
+    },
     results,
     totalSchemaEvents: schema.events.length,
     totalExpected: managedEvents.length,
@@ -586,19 +966,26 @@ export async function runPreviewVerification(
   containerId: string,
   workspaceId: string,
   gtmPublicId: string, // GTM-XXXXXX
-  injectGTM: boolean = false
+  injectGTM: boolean = false,
+  browser?: Browser,
 ): Promise<PreviewResult> {
   const startedAt = new Date().toISOString();
+  const totalStartedAt = Date.now();
 
   // Enable GTM preview mode
   console.log('  Enabling GTM Quick Preview...');
+  const quickPreviewStartedAt = Date.now();
   await client.quickPreview(accountId, containerId, workspaceId);
+  const quickPreviewMs = Date.now() - quickPreviewStartedAt;
 
   // Get preview environment auth params for client-side GTM preview URL injection
   let previewUrlParams: string | null = null;
+  let previewEnvironmentMs = 0;
   if (injectGTM) {
     console.log('  Fetching GTM preview environment token...');
+    const previewEnvironmentStartedAt = Date.now();
     const previewEnv = await client.getPreviewEnvironment(accountId, containerId, workspaceId);
+    previewEnvironmentMs = Date.now() - previewEnvironmentStartedAt;
     if (previewEnv) {
       previewUrlParams = `gtm_preview=${previewEnv.gtmPreview}&gtm_auth=${previewEnv.gtmAuth}`;
       console.log(`  ✅ Preview env: ${previewEnv.gtmPreview}`);
@@ -616,19 +1003,27 @@ export async function runPreviewVerification(
   }
 
   const mapPageUrl = (originalUrl: string) => {
-    if (!injectGTM || !previewUrlParams) return originalUrl;
-    const separator = originalUrl.includes('?') ? '&' : '?';
-    return `${originalUrl}${separator}${previewUrlParams}`;
+    return mapPreviewPageUrl(originalUrl, injectGTM, previewUrlParams);
   };
 
-  return runBrowserVerification({
+  const previewResult = await runBrowserVerification({
     siteAnalysis,
     schema,
     gtmPublicId,
     startedAt,
     gtmScriptUrl,
     mapPageUrl,
+    browser,
   });
+
+  previewResult.timing = {
+    totalMs: Date.now() - totalStartedAt,
+    quickPreviewMs,
+    previewEnvironmentMs: injectGTM ? previewEnvironmentMs : undefined,
+    browserVerificationMs: previewResult.timing?.browserVerificationMs,
+  };
+
+  return previewResult;
 }
 
 export async function runLiveVerification(

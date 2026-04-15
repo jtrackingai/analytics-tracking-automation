@@ -270,6 +270,69 @@ test('routing eval fixtures stay aligned with the skill contract', () => {
   }
 });
 
+test('contract keeps explicit checkpoint approval semantics for chat-driven runs', () => {
+  const contract = readJson('skills/contract.json');
+  const rootSkill = readText('SKILL.md');
+  const groupingSkill = readText('skills/tracking-group/SKILL.md');
+  const schemaSkill = readText('skills/tracking-schema/SKILL.md');
+
+  assert.equal(
+    contract.approvalSemantics?.broadWorkflowRequestsDoNotBypassCheckpoints,
+    true,
+    'Contract should explicitly state that broad workflow requests do not bypass approval checkpoints.',
+  );
+
+  const pageGroupsCheckpoint = contract.approvalSemantics?.checkpoints?.find(item => item.checkpoint === 'pageGroups');
+  const schemaCheckpoint = contract.approvalSemantics?.checkpoints?.find(item => item.checkpoint === 'eventSchema');
+
+  assert.equal(
+    pageGroupsCheckpoint?.allowAutoYesWithoutCurrentTurnExplicitApproval,
+    false,
+    'Page-group approval should never be auto-recorded from broad workflow scope alone.',
+  );
+  assert.equal(
+    schemaCheckpoint?.allowAutoYesWithoutCurrentTurnExplicitApproval,
+    false,
+    'Schema approval should never be auto-recorded from broad workflow scope alone.',
+  );
+
+  assert.match(
+    rootSkill,
+    /A broad request such as "full workflow", "全流程", "end-to-end", or "continue all the way" is scope authorization only\./,
+    'Root skill should explicitly forbid treating broad workflow requests as checkpoint approval.',
+  );
+  assert.match(
+    groupingSkill,
+    /A broad request such as "full workflow" or "全流程" does not count as page-group approval\./,
+    'Grouping skill should explicitly keep page-group approval separate from broad workflow scope.',
+  );
+  assert.match(
+    schemaSkill,
+    /a broad request such as "full workflow" or "全流程" does not count as schema approval/,
+    'Schema skill should explicitly keep schema approval separate from broad workflow scope.',
+  );
+});
+
+test('approval semantics fixtures stay aligned with the contract red lines', () => {
+  const contract = readJson('skills/contract.json');
+  const fixtures = readJson('tests/fixtures/skill-approval-semantics-evals.json');
+
+  for (const fixture of fixtures) {
+    const checkpoint = contract.approvalSemantics?.checkpoints?.find(item => item.checkpoint === fixture.checkpoint);
+    assert.ok(checkpoint, `${fixture.name} should reference a real approval checkpoint.`);
+
+    const allowAutoApprove = checkpoint.allowAutoYesWithoutCurrentTurnExplicitApproval === true
+      || checkpoint.allowAutoSelectionWithoutExplicitIds === true
+      || checkpoint.allowAutoPublishWithoutCurrentTurnExplicitApproval === true;
+
+    assert.equal(
+      allowAutoApprove,
+      fixture.expectedCanAutoApprove,
+      `${fixture.name} should preserve the contract boundary that broad workflow scope is not approval.`,
+    );
+  }
+});
+
 test('stop-rule eval fixtures stay aligned with the skill contract', () => {
   const contract = readJson('skills/contract.json');
   const fixtures = readJson('tests/fixtures/skill-stop-rule-evals.json');
