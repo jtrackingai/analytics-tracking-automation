@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import { RunContext, readRunContext, upsertRunContext } from './run-index';
-import { WorkflowScenario, WorkflowSubScenario } from './state';
+import { WorkflowMode, WorkflowSubMode } from './state';
 
 export const VERSIONS_DIR = 'versions';
 export const RUN_MANIFEST_FILE = 'run-manifest.json';
@@ -17,8 +17,8 @@ export interface RunManifestFileRecord {
 export interface RunManifest {
   schemaVersion: 1;
   runId: string;
-  scenario: WorkflowScenario;
-  subScenario: WorkflowSubScenario;
+  mode: WorkflowMode;
+  subMode: WorkflowSubMode;
   runStartedAt: string;
   updatedAt: string;
   artifactDir: string;
@@ -82,8 +82,8 @@ function updateManifest(args: {
   const manifest: RunManifest = {
     schemaVersion: 1,
     runId,
-    scenario: args.runContext.scenario || 'legacy',
-    subScenario: args.runContext.subScenario || 'none',
+    mode: args.runContext.mode || 'legacy',
+    subMode: args.runContext.subMode || 'none',
     runStartedAt,
     updatedAt: new Date().toISOString(),
     artifactDir,
@@ -99,8 +99,8 @@ export function ensureActiveRunContext(args: {
   artifactDir: string;
   outputRoot?: string;
   siteUrl?: string;
-  scenario?: WorkflowScenario;
-  subScenario?: WorkflowSubScenario;
+  mode?: WorkflowMode;
+  subMode?: WorkflowSubMode;
   inputScope?: string;
   forceNewRun?: boolean;
 }): RunContext {
@@ -118,10 +118,10 @@ export function ensureActiveRunContext(args: {
     artifactDir,
     outputRoot: args.outputRoot,
     siteUrl: args.siteUrl,
+    mode: args.mode,
+    subMode: args.subMode,
     runId,
     runStartedAt,
-    scenario: args.scenario,
-    subScenario: args.subScenario,
     inputScope: args.inputScope,
   });
 

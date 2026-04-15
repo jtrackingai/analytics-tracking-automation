@@ -82,6 +82,11 @@ export interface SiteAnalysis {
   platform: SitePlatform;
   pages: PageAnalysis[];
   pageGroups: PageGroup[];
+  artifactSource?: {
+    mode: 'crawl' | 'placeholder' | 'legacy_fallback';
+    reason?: string;
+    derivedFrom?: string[];
+  };
   pageGroupsReview?: PageGroupsReview;
   gtmPublicIds?: string[];
   discoveredUrls: string[];

@@ -4,7 +4,7 @@ Most generated files live inside a single artifact directory for the site.
 
 The only output-root-level index is `.event-tracking-runs.jsonl`, which records recent artifact directories so a later session can find and resume them.
 
-Each artifact directory also stores `.event-tracking-run.json`, which preserves the intended output root for later `runs` indexing and resume after directory moves, plus active run metadata (`activeRunId`, scenario, sub-scenario, input scope).
+Each artifact directory also stores `.event-tracking-run.json`, which preserves the intended output root for later `runs` indexing and resume after directory moves, plus active run metadata.
 
 - Required output root: pass `--output-root <dir>` to `analyze`, or enter it when the CLI prompts at startup
 - The artifact directory for a URL is derived as `<output-root>/<url-slug>`
@@ -12,20 +12,35 @@ Each artifact directory also stores `.event-tracking-run.json`, which preserves 
 After the artifact directory is chosen, downstream commands keep reading and writing the current files in that directory.
 At the same time, each write is snapshotted into `versions/<run-id>/...` so history is preserved without breaking existing command paths.
 
-## Files
+## Primary Workflow Artifacts
+
+These are the files that usually matter for routing, approval gates, and the next command.
 
 | File | Description |
 |------|-------------|
 | `site-analysis.json` | Raw page structure from Playwright crawl — pages, interactive elements, page groups, and page-group confirmation metadata |
 | `live-gtm-analysis.json` | Parsed summary of the site's real public GTM runtime, including existing live events, parameters, trigger hints, and the primary comparison container |
+| `schema-context.json` | Compressed crawl data for AI event generation (auto-generated, do not edit) |
+| `event-schema.json` | GA4 event plan — editable before generating GTM config. For Shopify runs, `prepare-schema` bootstraps this file automatically if it does not already exist |
+| `workflow-state.json` | Machine-readable workflow checkpoint state, including schema confirmation, verification status, publish status, warnings, and next recommended step |
+| `gtm-config.json` | GTM Web Container export JSON ready to sync, plus event-tracking metadata such as GA4 Measurement ID, configuration-tag target ID, and optional Google tag ID |
+| `gtm-context.json` | Saved GTM account / container / workspace IDs for subsequent steps |
+| `preview-result.json` | Raw preview intercept data, including unexpected fired events outside the approved schema |
+| `tracking-health.json` | Machine-readable preview health score, blockers, recommendations, unexpected-event summary, and optional baseline diff; Shopify manual verification uses `score: null` |
+| `shopify-schema-template.json` | Shopify-only baseline event schema template generated during `prepare-schema`; use as the starting point for ecommerce custom events |
+| `shopify-custom-pixel.js` | Shopify-only artifact generated after `sync`; installs GTM inside Shopify Customer Events and bridges Shopify standard events into `dataLayer` |
+| `shopify-install.md` | Shopify-only install instructions for the generated custom pixel |
+
+## Derived Reports
+
+These are presentation or audit artifacts derived from the primary workflow files.
+
+| File | Description |
+|------|-------------|
 | `live-gtm-review.md` | Human-readable audit of the live GTM baseline and container comparison |
 | `live-preview-result.json` | Raw published-live verification intercept data captured from the site's existing GTM setup, including unexpected fired events outside the parsed live-event baseline |
 | `live-preview-report.md` | Human-readable published-live verification report for existing GTM tags |
 | `live-tracking-health.json` | Machine-readable health verdict for published-live GTM verification; kept separate from workspace/schema preview health |
-| `schema-context.json` | Compressed crawl data for AI event generation (auto-generated, do not edit) |
-| `shopify-schema-template.json` | Shopify-only baseline event schema template generated during `prepare-schema`; use as the starting point for ecommerce custom events |
-| `shopify-bootstrap-review.md` | Shopify-only human-readable review of baseline and inferred bootstrap events, including why each one was included and whether it should be kept, reviewed manually, or removed |
-| `event-schema.json` | GA4 event plan — editable before generating GTM config. For Shopify runs, `prepare-schema` bootstraps this file automatically if it does not already exist |
 | `event-spec.md` | Human-readable event specification for stakeholder review |
 | `event-schema-diff-report.md` | Tracking Update schema diff against a chosen baseline schema |
 | `tracking-update-change-summary.md` | Business-friendly Tracking Update change summary for stakeholder communication |
@@ -36,23 +51,24 @@ At the same time, each write is snapshotted into `versions/<run-id>/...` so hist
 | `tracking-health-schema-gap-report.md` | Tracking Health Audit schema-vs-live gap report with `missing_event`, `missing_parameter`, `weak_naming`, `partial_coverage`, and `high_value_page_gap` classifications |
 | `tracking-health-preview-report.md` | Tracking Health Audit preview/validation summary with `healthy`, `failure`, and `not_observable` classifications |
 | `tracking-health-next-step-recommendation.md` | Tracking Health Audit recommendation with explicit `Enter New Setup: yes/no` decision |
+| `preview-report.md` | Human-readable event firing verification report (failures categorized by type) |
+| `tracking-health-report.md` | Human-readable tracking-health summary (score/grade, blockers, recommendations, event status, and optional baseline comparison) |
+| `tracking-health-history/` | Timestamped snapshots of every generated tracking health report |
+| `shopify-bootstrap-review.md` | Shopify-only human-readable review of baseline and inferred bootstrap events, including why each one was included and whether it should be kept, reviewed manually, or removed |
+
+## Internal Run Metadata And History
+
+These files support approvals, restore points, indexing, and auditability. They usually should not be treated as primary user-facing deliverables.
+
+| File | Description |
+|------|-------------|
 | `schema-decisions.jsonl` | Append-only schema confirmation audit, including added, changed, removed, and unchanged events compared with the previous confirmed snapshot when available |
 | `schema-restore/` | Restore snapshots of confirmed `event-schema.json` versions, keyed by schema hash |
 | `.event-tracking-run.json` | Run-context metadata for output-root recovery and run indexing |
-| `scenario-transitions.jsonl` | Append-only scenario transition audit log (from/to scenario, run IDs, optional reason) |
+| `mode-transitions.jsonl` | Append-only workflow mode transition audit log (from/to mode, run IDs, optional reason) |
 | `versions/` | Per-run snapshots of generated artifacts, keyed by run ID |
-| `versions/<run-id>/run-manifest.json` | Run metadata (`runId`, scenario, sub-scenario, run start, input scope) plus per-file snapshot records |
-| `workflow-state.json` | Machine-readable workflow checkpoint state, including schema confirmation, verification status, publish status, warnings, and next recommended step |
-| `gtm-config.json` | GTM Web Container export JSON ready to sync, plus event-tracking metadata such as GA4 Measurement ID, configuration-tag target ID, and optional Google tag ID |
-| `gtm-context.json` | Saved GTM account / container / workspace IDs for subsequent steps |
+| `versions/<run-id>/run-manifest.json` | Run metadata (`runId`, mode, sub-mode, run start, input scope) plus per-file snapshot records |
 | `credentials.json` | URL-scoped Google OAuth token cache reused by `sync`, `preview`, and `publish` for this artifact directory; never commit this file |
-| `preview-report.md` | Human-readable event firing verification report (failures categorized by type) |
-| `preview-result.json` | Raw preview intercept data, including unexpected fired events outside the approved schema |
-| `tracking-health.json` | Machine-readable preview health score, blockers, recommendations, unexpected-event summary, and optional baseline diff; Shopify manual verification uses `score: null` |
-| `tracking-health-report.md` | Human-readable tracking-health summary (score/grade, blockers, recommendations, event status, and optional baseline comparison) |
-| `tracking-health-history/` | Timestamped snapshots of every generated tracking health report |
-| `shopify-custom-pixel.js` | Shopify-only artifact generated after `sync`; installs GTM inside Shopify Customer Events and bridges Shopify standard events into `dataLayer` |
-| `shopify-install.md` | Shopify-only install instructions for the generated custom pixel |
 
 ## Editing Between Steps
 
@@ -89,15 +105,15 @@ If `site-analysis.json` detected real GTM public IDs, run `./event-tracking anal
 - Use `./event-tracking preview ... --baseline <previous-tracking-health.json>` to compare a new preview run with an older tracking health baseline. If omitted, an existing `tracking-health.json` in the same artifact directory is used as the baseline before it is overwritten.
 - `publish` now requires a current non-blocking `tracking-health.json`; use `--force` only when you intentionally want to override a missing or blocked verification state.
 - For Shopify sites, re-install `shopify-custom-pixel.js` after re-syncing to a different GTM container
-- When you want to label a new iteration before continuing, use `./event-tracking scenario <artifact-dir> --set <scenario> --new-run [--sub-scenario ...] [--input-scope ...]`
-- Use `./event-tracking start-scenario <scenario> <artifact-dir>` as an explicit scenario entry point when transitioning between `new_setup`, `tracking_update`, `upkeep`, and `tracking_health_audit`
-- Use `./event-tracking scenario-transition <artifact-dir> --to <scenario>` to explicitly record scenario handoffs (for example `tracking_health_audit -> new_setup`, `upkeep -> tracking_update`)
-- Use `./event-tracking scenario-check <artifact-dir>` to validate whether required artifacts for the active scenario are present and to get scenario-specific next-step guidance
-- Use scenario template commands when you want scenario-oriented guidance/execution under a new scenario run: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
-- Scenario check requirements are configurable in `src/workflow/scenario-requirements.json`
-- In scenario `tracking_health_audit`, deployment commands (`generate-gtm`, `sync`, `publish`) are blocked by default because this scenario is audit-only
-- `run-health-audit` should not produce `gtm-config.json`; this scenario is assessment-only
-- Reporting commands are also scenario-gated (for example `generate-upkeep-report` is intended for `upkeep`, and `generate-health-audit-report` is intended for `tracking_health_audit`)
+- Use `./event-tracking status <artifact-dir-or-file>` as the default resume command. It now shows both checkpoint guidance and workflow mode readiness.
+- Use `./event-tracking status <artifact-dir-or-file> --mode-only` when you only need workflow mode readiness instead of the full workflow status.
+- Use high-level template commands for user-facing entry flows: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
+- Workflow mode metadata remains in workflow state and run history, but no longer needs a separate low-level command surface for normal use.
+- The `analyze --mode/--sub-mode/--input-scope` flags set workflow mode metadata directly.
+- Workflow mode requirements are loaded through `src/workflow/mode-requirements.ts` from `src/workflow/mode-requirements.json`.
+- In workflow mode `tracking_health_audit`, deployment commands (`generate-gtm`, `sync`, `publish`) are blocked by default because this mode is audit-only
+- `run-health-audit` should not produce `gtm-config.json`; this mode is assessment-only
+- Reporting commands are also mode-gated (for example `generate-upkeep-report` is intended for `upkeep`, and `generate-health-audit-report` is intended for `tracking_health_audit`)
 
 ## Directory Example
 
@@ -124,7 +140,7 @@ Example:
   schema-decisions.jsonl
   schema-restore/
   .event-tracking-run.json
-  scenario-transitions.jsonl
+  mode-transitions.jsonl
   versions/
     20260409T120501Z-ab12cd/
       run-manifest.json

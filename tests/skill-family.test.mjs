@@ -105,7 +105,7 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   const skillMapRef = readText('references/skill-map.md');
 
   assert.match(rootSkill, /## Conversation Intake/, 'Root skill should define a conversation-first intake section for chat entry.');
-  assert.match(rootSkill, /Do not ask the user to choose between `scenario` and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
+  assert.match(rootSkill, /Do not ask the user to choose between internal workflow metadata flags and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
   assert.match(rootSkill, /## Routing Rules/, 'Root skill should keep routing rules explicit.');
   assert.match(rootSkill, /track(?:ing)?-shopify|`tracking-shopify`/, 'Root skill should mention the Shopify phase skill.');
   assert.match(rootSkill, /Do not continue past the phase boundary the user asked for\./, 'Root skill should keep a phase stop rule.');

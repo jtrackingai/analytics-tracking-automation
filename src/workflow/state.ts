@@ -22,14 +22,14 @@ export const WORKFLOW_STATE_FILE = 'workflow-state.json';
 
 const PUBLIC_COMMAND = process.env.EVENT_TRACKING_PUBLIC_CMD?.trim() || './event-tracking';
 
-export type WorkflowScenario =
+export type WorkflowMode =
   | 'new_setup'
   | 'tracking_update'
   | 'upkeep'
   | 'tracking_health_audit'
   | 'legacy';
 
-export type WorkflowSubScenario =
+export type WorkflowSubMode =
   | 'none'
   | 'new_requests'
   | 'legacy_maintenance';
@@ -107,8 +107,8 @@ export interface WorkflowState {
   artifactDir: string;
   runId: string;
   runStartedAt: string;
-  scenario: WorkflowScenario;
-  subScenario: WorkflowSubScenario;
+  mode: WorkflowMode;
+  subMode: WorkflowSubMode;
   inputScope?: string;
   siteUrl?: string;
   platformType?: string;
@@ -127,8 +127,8 @@ export interface WorkflowState {
 export interface WorkflowStateUpdate {
   runId?: string;
   runStartedAt?: string;
-  scenario?: WorkflowScenario;
-  subScenario?: WorkflowSubScenario;
+  mode?: WorkflowMode;
+  subMode?: WorkflowSubMode;
   inputScope?: string;
   siteUrl?: string;
   schemaReview?: Partial<SchemaReviewState>;
@@ -258,7 +258,7 @@ export function resolveArtifactDirFromInput(input: string): string {
     return fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
   }
 
-  // Most scenario commands accept an artifact directory that may not exist yet.
+  // Most workflow mode commands accept an artifact directory that may not exist yet.
   // Only treat missing inputs as file paths when they look like artifact files.
   return path.extname(path.basename(resolved)) ? path.dirname(resolved) : resolved;
 }
@@ -568,6 +568,22 @@ export function buildWorkflowState(artifactDir: string, previousState?: Workflow
     warnings.push('site-analysis.json is missing. Workflow state is being inferred from later-stage artifacts only.');
   }
 
+  const analysisSource = analysis && typeof analysis === 'object' && analysis !== null
+    && 'artifactSource' in analysis
+    ? (analysis as { artifactSource?: { mode?: string; reason?: string } }).artifactSource
+    : undefined;
+  if (analysisSource?.mode === 'placeholder' || analysisSource?.mode === 'legacy_fallback') {
+    warnings.push(`site-analysis.json is ${analysisSource.mode === 'placeholder' ? 'a placeholder artifact' : 'a legacy fallback artifact'}. ${analysisSource.reason || 'Treat page grouping and page evidence as inferred rather than freshly crawled.'}`);
+  }
+
+  const schemaSource = schema && typeof schema === 'object' && schema !== null
+    && 'artifactSource' in schema
+    ? (schema as { artifactSource?: { mode?: string; reason?: string } }).artifactSource
+    : undefined;
+  if (schemaSource?.mode === 'baseline_clone' || schemaSource?.mode === 'health_audit_recommendation') {
+    warnings.push(`event-schema.json is ${schemaSource.mode === 'baseline_clone' ? 'a baseline-cloned recommendation' : 'a health-audit recommendation'}. ${schemaSource.reason || 'Review it carefully before treating it as an approved implementation plan.'}`);
+  }
+
   if (artifacts.schemaContext && !completed.includes('group_approved')) {
     warnings.push('schema-context.json exists, but page groups are not currently approved. Re-confirm page groups and rerun prepare-schema.');
   }
@@ -619,8 +635,8 @@ export function buildWorkflowState(artifactDir: string, previousState?: Workflow
     artifactDir,
     runId: previousState?.runId || 'legacy',
     runStartedAt: previousState?.runStartedAt || previousState?.updatedAt || new Date().toISOString(),
-    scenario: previousState?.scenario || 'legacy',
-    subScenario: previousState?.subScenario || 'none',
+    mode: previousState?.mode || 'legacy',
+    subMode: previousState?.subMode || 'none',
     inputScope: previousState?.inputScope,
     siteUrl: analysis?.rootUrl || previousState?.siteUrl,
     platformType: analysis?.platform.type,
@@ -653,12 +669,12 @@ export function readWorkflowState(artifactDir: string): WorkflowState | null {
 export function refreshWorkflowState(artifactDir: string, update?: WorkflowStateUpdate): WorkflowState {
   const previousState = readWorkflowState(artifactDir);
   const mergedState: WorkflowState | null = previousState
-    ? {
-        ...previousState,
+      ? {
+          ...previousState,
         runId: update?.runId || previousState.runId,
         runStartedAt: update?.runStartedAt || previousState.runStartedAt,
-        scenario: update?.scenario || previousState.scenario,
-        subScenario: update?.subScenario || previousState.subScenario,
+        mode: update?.mode || previousState.mode,
+        subMode: update?.subMode || previousState.subMode,
         inputScope: typeof update?.inputScope === 'string' ? update.inputScope : previousState.inputScope,
         siteUrl: update?.siteUrl || previousState.siteUrl,
         schemaReview: mergeSchemaReview(previousState.schemaReview, update?.schemaReview),
@@ -672,8 +688,8 @@ export function refreshWorkflowState(artifactDir: string, update?: WorkflowState
           artifactDir,
           runId: update.runId || 'legacy',
           runStartedAt: update.runStartedAt || new Date().toISOString(),
-          scenario: update.scenario || 'legacy',
-          subScenario: update.subScenario || 'none',
+          mode: update.mode || 'legacy',
+          subMode: update.subMode || 'none',
           inputScope: update.inputScope,
           siteUrl: update.siteUrl,
           currentCheckpoint: 'not_started',

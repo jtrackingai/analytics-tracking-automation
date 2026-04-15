@@ -98,7 +98,7 @@
     "name": "tracking health audit blocks deployment commands by default",
     "command": "sync",
     "context": {
-      "scenario": "tracking_health_audit",
+      "mode": "tracking_health_audit",
       "userExplicitOverride": false
     },
     "expectedBlocked": true,
@@ -108,7 +108,7 @@
     "name": "tracking health audit allows deployment commands with explicit override",
     "command": "sync",
     "context": {
-      "scenario": "tracking_health_audit",
+      "mode": "tracking_health_audit",
       "userExplicitOverride": true
     },
     "expectedBlocked": false,

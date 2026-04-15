@@ -75,7 +75,7 @@
     "expectedStopBoundary": "preview or explicit publish handoff"
   },
   {
-    "name": "tracking update keeps scenario-first intake",
+    "name": "tracking update keeps mode-first intake",
     "input": "We already have tracking live. Run a tracking update for new CTA flows and revised signup paths.",
     "expectedIntent": "tracking_update",
     "expectedEntryCommand": "run-tracking-update",
@@ -83,7 +83,7 @@
     "expectedStopBoundary": null
   },
   {
-    "name": "upkeep keeps scenario-first intake",
+    "name": "upkeep keeps mode-first intake",
     "input": "Do an upkeep review for this setup and tell me what drifted.",
     "expectedIntent": "upkeep",
     "expectedEntryCommand": "run-upkeep",

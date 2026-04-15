@@ -54,22 +54,17 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 
 ## Shared Contract
 
-1. Use the repo-local wrapper `./event-tracking` for CLI commands in this repository. If the wrapper reports that `dist/cli.js` is missing, run `npm run build` first. This bundle assumes Node.js 18+, npm, and Playwright Chromium are available for browser-backed commands.
-2. Keep one artifact directory per site (`<output-root>/<url-slug>`). Each iteration inside that artifact should use a distinct run ID with snapshots under `versions/<run-id>/`.
-3. If the user already provides an artifact directory or one of its files, resume from the earliest unmet prerequisite instead of restarting from `analyze`.
-4. Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.
-5. Use `./event-tracking runs <output-root>` when the user wants to find recent site runs and does not remember the artifact directory.
-6. Google OAuth client metadata is embedded in the CLI and may be overridden with `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET`.
-7. Any Playwright-backed or OAuth-triggering step must run outside a sandboxed environment by default. In practice, treat `analyze`, `validate-schema --check-selectors`, `preview`, and `sync` as non-sandbox commands, and do not first attempt them in the sandbox before retrying after interception.
-8. Run prompt-driven OAuth / GTM selection commands with an interactive TTY from the start. In practice, run `sync` with TTY enabled unless the user already provided exact `--account-id`, `--container-id`, and `--workspace-id` values. Do not first try non-interactive sync and then retry with TTY.
-9. GTM OAuth credentials are cached per artifact at `<artifact-dir>/credentials.json`; local migration code may also clear or import older credential files when the user asks to reuse or clear stored auth.
-10. Anonymous usage telemetry is opt-in. It stores consent in the local user config, never sends full URLs, file paths, selectors, GTM/GA IDs, OAuth data, or raw errors, and is disabled by `DO_NOT_TRACK=1` or `EVENT_TRACKING_TELEMETRY=0`.
-11. Never auto-select a GTM account, GTM container, or GTM workspace on the user's behalf. Always show candidates and require explicit confirmation unless the user already provided the exact ID for that step.
-12. Prefer scenario-first entry commands for user-facing flows: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`. Use `start-scenario` when the user wants a labeled scenario run without immediate template execution.
-13. Use `./event-tracking scenario <artifact-dir> --set <scenario> [--sub-scenario ...] [--new-run]` for metadata-only adjustments when you should not alter execution flow.
-14. Use `./event-tracking scenario-check <artifact-dir>` when the question is "is this scenario ready" rather than "what is the next workflow checkpoint".
-15. Use `./event-tracking scenario-transition <artifact-dir> --to <scenario> [--reason ...]` when the user wants an auditable handoff between scenarios.
-16. Do not continue past the phase boundary the user asked for. Stop after the requested phase unless the user explicitly asks to continue.
+- Use the repo-local wrapper `./event-tracking` in this repository. If `dist/cli.js` is missing, run `npm run build` first.
+- Keep one artifact directory per site at `<output-root>/<url-slug>`.
+- If the user already provides an artifact directory or one of its files, resume from the earliest unmet prerequisite instead of restarting from `analyze`.
+- Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.
+- Use `./event-tracking runs <output-root>` when the artifact directory is unknown but the output root is known.
+- Prefer high-level entry commands for user-facing flows: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`.
+- Treat workflow mode metadata as an internal workflow-state layer, not a user-facing command surface.
+- Treat Playwright-backed and OAuth-prompting steps as non-sandbox commands by default. In practice: `analyze`, `validate-schema --check-selectors`, `preview`, and `sync`.
+- Run prompt-driven GTM sync with an interactive TTY from the start unless exact `--account-id`, `--container-id`, and `--workspace-id` values are already confirmed.
+- Never auto-select a GTM account, container, or workspace on the user's behalf.
+- Do not continue past the phase boundary the user asked for.
 
 ## Conversation Intake
 
@@ -86,7 +81,7 @@ Classify the request into one of these entry intents:
 
 Rules:
 
-- Do not ask the user to choose between `scenario` and `analyze`. `scenario` is run-intent orchestration metadata; `analyze` is only one execution step.
+- Do not ask the user to choose between internal workflow metadata flags and `analyze`.
 - If intent is ambiguous, ask one short plain-language intake question using user-facing terms such as "new setup", "update existing tracking", "upkeep", "health audit", "analyze only", or "resume an existing run".
 - If the user gives a fresh URL and asks to set up tracking, default to `new_setup`.
 - If the user gives a fresh URL and only asks to inspect the site, analyze structure, or review current tracking signals, default to `analysis_only`.
@@ -122,7 +117,7 @@ If only the root skill is available, follow the same routing logic directly and 
 - Treat preview QA and publish as separate decisions.
 - Treat `tracking-health.json` as the publish gate; do not jump to publish when health is missing, manual-only, or blocked unless the user explicitly wants `--force`.
 - Treat Shopify manual verification as the expected path for Shopify runs, not as a fallback error case.
-- Treat `tracking_health_audit` as an audit-only scenario. Do not run GTM deployment actions (`generate-gtm`, `sync`, `publish`) unless the user explicitly asks to override.
+- Treat `tracking_health_audit` as an audit-only workflow mode. Do not run GTM deployment actions (`generate-gtm`, `sync`, `publish`) unless the user explicitly asks to override.
 
 ## Resume And Closeout
 
@@ -132,14 +127,11 @@ When resuming:
 - still inspect the real artifact set if warnings indicate stale gates
 - use `status` when the next step is unclear
 
-When a phase or the full workflow ends, summarize:
+When a phase or the full workflow ends, keep the closeout answer-first:
 
-- first give a compact, decision-ready summary in plain language
-- keep the default chat summary human-readable; do not dump raw JSON, raw URL lists, or artifact inventory first
-- for page grouping, summarize group count, grouping logic, and a compact group table before any file references
-- for schema review, default to `Event Table`, then `Common Properties`, then `Event-specific Properties`
-- keep `tracking_health_audit` and `upkeep` as separate summary modes even if they share rendering helpers
-- only after the summary, list artifact directory, current checkpoint, key output files, next recommended command, and remaining manual actions
+- lead with a compact, decision-ready summary in plain language
+- do not dump raw JSON, raw URL lists, or artifact inventory before the summary
+- list files, checkpoint, and next command only after the human-readable summary
 
 ## References
 

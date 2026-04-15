@@ -190,7 +190,7 @@ This skill reflects the implementation workflow behind [JTracking](https://www.j
 
 If you need a more advanced setup, JTracking also supports:
 
-- richer tracking design based on business scenarios
+- richer tracking design based on concrete business flows
 - server-side tracking and custom loaders
 - more destination and ad-platform integrations
 - longer-term tracking operations and maintenance

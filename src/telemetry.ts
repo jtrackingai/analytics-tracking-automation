@@ -31,7 +31,7 @@ const ALLOWED_PARAM_NAMES = new Set([
   'duration_ms',
   'exit_code',
   'error_type',
-  'scenario',
+  'mode',
   'checkpoint',
   'site_hostname',
   'run_mode',

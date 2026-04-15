@@ -14,21 +14,14 @@ If you are working in the source repository, the repo-facing overview still live
 | Run index layer | Recent run discovery for resume workflows plus per-artifact output-root recovery | `.event-tracking-runs.jsonl` under the output root and `.event-tracking-run.json` inside each artifact directory |
 | Reference layer | Domain rules for crawl, grouping, schema, preview, and Shopify behavior | `references/*.md` |
 
-## Scenario Orchestration
+## How To Read The System
 
-The CLI now layers scenario orchestration on top of checkpoint execution:
+Treat the workflow as checkpoint-first.
 
-- start a labeled scenario run: `start-scenario`
-- relabel scenario metadata without executing a step: `scenario`
-- run scenario templates: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`
-- validate scenario readiness: `scenario-check`
-- record scenario handoff with reason: `scenario-transition`
-
-Guardrails:
-
-- `tracking_health_audit` is audit-only by default
-- deployment commands are blocked in that scenario unless explicitly forced
-- scenario report commands are scenario-gated by intent
+- Use artifacts plus `workflow-state.json` to understand the current checkpoint.
+- Treat workflow mode metadata as internal workflow state; prefer the high-level `run-*` commands plus `status`.
+- Prefer `status --mode-only` when the question is specifically about workflow mode readiness.
+- Treat low-level `analyze` mode metadata flags as advanced compatibility inputs, not the preferred user-facing entry path.
 
 ## Public Surface
 
@@ -109,7 +102,7 @@ Use `event-tracking runs <output-root>` when the artifact directory is unknown b
 
 - current checkpoint
 - completed checkpoints
-- scenario metadata (`scenario`, `subScenario`, `runId`, `runStartedAt`, optional `inputScope`)
+- workflow mode metadata (`mode`, `subMode`, `runId`, `runStartedAt`, optional `inputScope`)
 - page-group review state
 - live GTM baseline readiness
 - schema review state
@@ -120,6 +113,8 @@ Use `event-tracking runs <output-root>` when the artifact directory is unknown b
 - next recommended action and command
 
 Treat it as the machine-readable checkpoint layer on top of the artifact files themselves.
+
+When placeholder or inherited artifacts are present, workflow-state warnings should call that out explicitly so downstream steps are not mistaken for fresh crawl-backed evidence.
 
 ## Skill Family
 

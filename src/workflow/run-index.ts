@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { WorkflowState } from './state';
+import { WorkflowMode, WorkflowState, WorkflowSubMode } from './state';
 
 export const RUN_INDEX_FILE = '.event-tracking-runs.jsonl';
 export const RUN_CONTEXT_FILE = '.event-tracking-run.json';
@@ -15,8 +15,8 @@ export interface RunContext {
   siteUrl?: string;
   activeRunId?: string;
   activeRunStartedAt?: string;
-  scenario?: WorkflowState['scenario'];
-  subScenario?: WorkflowState['subScenario'];
+  mode?: WorkflowMode;
+  subMode?: WorkflowSubMode;
   inputScope?: string;
 }
 
@@ -32,8 +32,8 @@ export interface RunIndexEntry {
   nextAction: string;
   nextCommand?: string;
   runId: string;
-  scenario: WorkflowState['scenario'];
-  subScenario: WorkflowState['subScenario'];
+  mode: WorkflowMode;
+  subMode: WorkflowSubMode;
 }
 
 function getRunIndexFile(outputRoot: string): string {
@@ -90,8 +90,8 @@ export function upsertRunContext(args: {
   siteUrl?: string;
   runId?: string;
   runStartedAt?: string;
-  scenario?: WorkflowState['scenario'];
-  subScenario?: WorkflowState['subScenario'];
+  mode?: WorkflowMode;
+  subMode?: WorkflowSubMode;
   inputScope?: string;
 }): RunContext {
   const artifactDir = path.resolve(args.artifactDir);
@@ -112,8 +112,8 @@ export function upsertRunContext(args: {
     siteUrl: args.siteUrl || existing?.siteUrl,
     activeRunId: args.runId || existing?.activeRunId,
     activeRunStartedAt: args.runStartedAt || existing?.activeRunStartedAt,
-    scenario: args.scenario || existing?.scenario,
-    subScenario: args.subScenario || existing?.subScenario,
+    mode: args.mode || existing?.mode,
+    subMode: args.subMode || existing?.subMode,
     inputScope: typeof args.inputScope === 'string' ? args.inputScope : existing?.inputScope,
   };
 
@@ -141,8 +141,8 @@ export function updateRunIndexFromState(state: WorkflowState): RunIndexEntry {
     siteUrl: state.siteUrl,
     runId: state.runId,
     runStartedAt: state.runStartedAt,
-    scenario: state.scenario,
-    subScenario: state.subScenario,
+    mode: state.mode,
+    subMode: state.subMode,
     inputScope: state.inputScope,
   }).outputRoot;
   const indexFile = getRunIndexFile(outputRoot);
@@ -158,8 +158,8 @@ export function updateRunIndexFromState(state: WorkflowState): RunIndexEntry {
     nextAction: state.nextAction,
     nextCommand: state.nextCommand,
     runId: state.runId,
-    scenario: state.scenario,
-    subScenario: state.subScenario,
+    mode: state.mode,
+    subMode: state.subMode,
   };
 
   const priorEntries = readJsonl<RunIndexEntry>(indexFile)

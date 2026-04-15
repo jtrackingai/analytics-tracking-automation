@@ -333,7 +333,7 @@ assertFileDoesNotContain('SKILL.md', '## Phase Contracts', 'Keep the root skill 
 assertFileContains('SKILL.md', 'compatibility:', 'Root skill frontmatter should declare runtime compatibility and capability notes.');
 assertFileDoesNotContain('SKILL.md', '~/.codex/skills', 'Root skill guidance should avoid explicit hidden home-directory paths.');
 assertFileDoesNotContain('docs/README.install.md', '~/.codex/skills', 'Install docs should avoid explicit hidden home-directory paths in user-facing guidance.');
-assertFileDoesNotContain('README.md', './event-tracking scenario <artifact-dir>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
+assertFileDoesNotContain('README.md', './event-tracking mode <artifact-dir>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking sync <artifact-dir>/gtm-config.json --dry-run', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking analyze-live-gtm <artifact-dir>/site-analysis.json --gtm-id GTM-XXXXXXX[,GTM-YYYYYYY]', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');
 assertFileDoesNotContain('README.md', './event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json --baseline <previous-tracking-health.json>', 'Keep the public README conversation-first; detailed CLI examples belong in maintainer docs.');

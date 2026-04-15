@@ -222,12 +222,12 @@
         "publish"
       ],
       "blockWhen": {
-        "scenario": "tracking_health_audit",
+        "mode": "tracking_health_audit",
         "userExplicitOverride": false
       },
       "allowOverride": true,
       "overrideFlag": "explicit user override",
-      "stopBoundary": "audit-only scenario"
+      "stopBoundary": "audit-only mode"
     }
   ],
   "phases": {
