@@ -123,11 +123,16 @@ function parseArgs(argv) {
 }
 
 function buildBundleMetadata(bundle, familyVersion, profile) {
+  const repositoryUrl = `https://github.com/${SKILL_FAMILY_REPOSITORY}`;
   const metadata = {
     name: bundle.name,
     kind: bundle.kind,
     familyName: SKILL_FAMILY_NAME,
     repository: SKILL_FAMILY_REPOSITORY,
+    homepage: repositoryUrl,
+    sourceUrl: repositoryUrl,
+    issuesUrl: `${repositoryUrl}/issues`,
+    license: 'Apache-2.0',
     familyVersion,
   };
 

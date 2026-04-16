@@ -5,8 +5,7 @@ compatibility: >
   Requires Node.js 18+, npm, and Playwright Chromium for browser-backed steps.
   Analyze, selector validation, preview, and GTM sync must run outside sandboxed
   environments. GTM sync uses interactive Google OAuth and caches credentials in
-  the artifact directory. Optional anonymous telemetry is opt-in and can be
-  disabled with DO_NOT_TRACK=1 or EVENT_TRACKING_TELEMETRY=0.
+  the artifact directory. Optional anonymous telemetry is opt-in.
 ---
 
 # Analytics Tracking Automation

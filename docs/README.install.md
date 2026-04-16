@@ -10,10 +10,13 @@ If you are packaging a public marketplace release for ClawHub, do not upload the
 npm run export:skills:clawhub
 ```
 
-Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only the published skill surface and omit the bundled auto-update runtime.
-Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles are installable slim runtime bundles: they keep the skill docs, references, compiled CLI, and a bundle-local bootstrap entrypoint, while omitting the GitHub self-update runtime and the full source repository.
+Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only the published skill surface (skill docs + references) and omit bundled executable runtime files, telemetry transport, and auto-update runtime.
 
-After a user downloads one of those ClawHub bundles into their local skills directory, the skill can run directly from the bundle. On the first CLI-backed command, the bundle runs `npm ci --omit=dev` inside its packaged runtime so production dependencies and Playwright Chromium are installed locally without needing the full repository checkout.
+Before running any `event-tracking` command from a ClawHub-installed bundle, install the published skill first:
+
+```bash
+npx skills add jtrackingai/analytics-tracking-automation
+```
 
 ## Recommended Path
 
