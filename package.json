@@ -10,6 +10,8 @@
     "build": "tsc",
     "check": "node scripts/check.mjs",
     "dev": "ts-node src/cli.ts",
+    "debug:open": "playwright open",
+    "debug:codegen": "playwright codegen",
     "doctor": "node scripts/doctor.mjs",
     "export:skills": "node scripts/export-skills.mjs",
     "export:skills:clawhub": "node scripts/export-skills.mjs --profile clawhub",

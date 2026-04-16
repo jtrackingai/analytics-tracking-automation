@@ -31,6 +31,8 @@ npm run doctor
 | `./setup --install-skills` | install dependencies, build, run environment checks, then install skill bundles into the default agent skills target |
 | `./setup --install-skills --mode link` | same as above, but link exported skill bundles into the skills directory for local iteration |
 | `npm run build` | compile TypeScript into `dist/` |
+| `npm run debug:open -- <url>` | open a real page with Playwright CLI (headed) for navigation/WAF/debug investigation |
+| `npm run debug:codegen -- <url>` | launch Playwright codegen to capture robust selectors for schema fixes |
 | `npm test` | rebuild, then run the standalone automated workflow-state and gate tests |
 | `npm run doctor` | verify Node, built CLI, repo-local wrapper, and Playwright Chromium |
 | `npm run export:skills` | generate self-contained skill bundles under `dist/skill-bundles/` |
@@ -104,6 +106,13 @@ Run this when working on crawl, preview, or environment issues:
 
 ```bash
 npm run doctor
+```
+
+For interactive Playwright debugging during preview triage:
+
+```bash
+npm run debug:open -- https://www.example.com
+npm run debug:codegen -- https://www.example.com
 ```
 
 `tests/workflow-state.test.mjs` is the current standalone automated test suite. `npm run check` remains the minimum release gate for this repository because it also verifies docs, packaging, and install shape.
