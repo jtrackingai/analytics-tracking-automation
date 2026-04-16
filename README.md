@@ -77,7 +77,13 @@ npm run export:skills:clawhub
 
 Then upload `dist/clawhub-skill-bundles/analytics-tracking-automation`.
 
-That public bundle is an installable slim runtime bundle. It keeps the agent-facing skill docs, references, compiled CLI runtime, and bundle-local bootstrap entrypoint, but strips the GitHub auto-update runtime and the full maintainer repository surface that tends to trigger broader security scans.
+That public bundle is a publish-safe skill bundle. It keeps the agent-facing skill docs and references while stripping bundled executable runtime files (CLI bootstrap, packaged node modules, telemetry transport, and updater runtime) that tend to trigger stricter marketplace security scans.
+
+When users install/use this public ClawHub bundle, they must run this prerequisite first (before any `event-tracking` command):
+
+```bash
+npx skills add jtrackingai/analytics-tracking-automation
+```
 
 ## Quick Start
 

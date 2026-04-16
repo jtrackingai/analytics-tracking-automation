@@ -161,7 +161,11 @@ function buildCliPackageJson() {
   };
 }
 
-function copyBundledCliRuntime(outputPath) {
+function copyBundledCliRuntime(outputPath, profile) {
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return;
+  }
+
   copyDirectory('runtime/cli-runtime', path.join(outputPath, 'runtime', 'cli-runtime'));
 
   const cliPackagePath = path.join(outputPath, 'runtime', 'cli-package');
@@ -197,7 +201,7 @@ function exportBundle(bundle, profile) {
   getCopiedDirectoriesForProfile(bundle, profile).forEach(copyEntry => {
     copyDirectoryForProfile(copyEntry.source, path.join(outputPath, copyEntry.target), profile);
   });
-  copyBundledCliRuntime(outputPath);
+  copyBundledCliRuntime(outputPath, profile);
 
   return {
     name: bundle.name,

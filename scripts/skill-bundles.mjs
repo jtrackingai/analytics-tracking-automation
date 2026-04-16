@@ -162,6 +162,14 @@ function listBundledCliFiles(repoRoot) {
   return expected;
 }
 
+function listBundledCliFilesForProfile(repoRoot, profile) {
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return [];
+  }
+
+  return listBundledCliFiles(repoRoot);
+}
+
 export function listExpectedExportedFiles(repoRoot, manifest, options = {}) {
   const profile = options.profile || EXPORT_PROFILE_PORTABLE;
   const exportRoot = getExportBundleRoot(profile);
@@ -173,7 +181,7 @@ export function listExpectedExportedFiles(repoRoot, manifest, options = {}) {
     expected.add(path.join(bundleRoot, 'VERSION'));
     expected.add(path.join(bundleRoot, 'bundle.json'));
     expected.add(path.join(bundleRoot, 'agents', 'openai.yaml'));
-    listBundledCliFiles(repoRoot).forEach(entry => {
+    listBundledCliFilesForProfile(repoRoot, profile).forEach(entry => {
       const relativeFile = entry.relativeFile || path.relative(entry.sourceRoot, entry.sourceFile);
       expected.add(path.join(bundleRoot, entry.targetRoot, relativeFile));
     });
@@ -223,10 +231,7 @@ export function normalizeBundledCommand(content) {
 }
 
 export function normalizeCopiedMarkdownContent(content, options = {}) {
-  const profile = options.profile || EXPORT_PROFILE_PORTABLE;
-  return profile === EXPORT_PROFILE_CLAWHUB
-    ? normalizeBundledCommand(content)
-    : normalizePublicCommand(content);
+  return normalizePublicCommand(content);
 }
 
 function injectAfterFrontmatter(content, insertedContent) {
@@ -289,9 +294,7 @@ function buildPortableAutoUpdateBootstrap(bundleName) {
 
 export function normalizeSkillContent(bundle, content, options = {}) {
   const profile = options.profile || EXPORT_PROFILE_PORTABLE;
-  const normalizeCommand = profile === EXPORT_PROFILE_CLAWHUB
-    ? normalizeBundledCommand
-    : normalizePublicCommand;
+  const normalizeCommand = normalizePublicCommand;
   const normalizedContent = bundle.kind === 'umbrella'
     ? normalizeCommand(content)
     : normalizeCommand(content)

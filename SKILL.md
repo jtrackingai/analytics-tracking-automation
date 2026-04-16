@@ -55,6 +55,7 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 ## Shared Contract
 
 - Use the repo-local wrapper `./event-tracking` in this repository. If `dist/cli.js` is missing, run `npm run build` first.
+- For public/ClawHub installs, you must run this first before any `event-tracking` command: `npx skills add jtrackingai/analytics-tracking-automation`.
 - Keep one artifact directory per site at `<output-root>/<url-slug>`.
 - If the user already provides an artifact directory or one of its files, resume from the earliest unmet prerequisite instead of restarting from `analyze`.
 - Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.
