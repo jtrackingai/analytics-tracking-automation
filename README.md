@@ -9,6 +9,7 @@
   <a href="#what-you-get">What You Get</a> ·
   <a href="#installation">Installation</a> ·
   <a href="#quick-start">Quick Start</a> ·
+  <a href="#quick-debug-tips">Quick Debug Tips</a> ·
   <a href="https://www.jtracking.ai/skills">Website</a>
 </p>
 
@@ -76,7 +77,13 @@ npm run export:skills:clawhub
 
 Then upload `dist/clawhub-skill-bundles/analytics-tracking-automation`.
 
-That public bundle keeps the agent-facing skill docs and references, but strips the bundled auto-update runtime and other maintainer-only packaging files that trigger broader security scans.
+That public bundle is a publish-safe skill bundle. It keeps the agent-facing skill docs and references while stripping bundled executable runtime files (CLI bootstrap, packaged node modules, telemetry transport, and updater runtime) that tend to trigger stricter marketplace security scans.
+
+When users install/use this public ClawHub bundle, they must run this prerequisite first (before any `event-tracking` command):
+
+```bash
+npx skills add jtrackingai/analytics-tracking-automation
+```
 
 ## Quick Start
 
@@ -172,6 +179,18 @@ A typical conversation flow is:
 - Skill family map: [docs/skills.md](docs/skills.md)
 - Agent-facing workflow contract: [SKILL.md](SKILL.md)
 - CLI and maintainer workflow: [DEVELOPING.md](DEVELOPING.md)
+
+## Quick Debug Tips
+
+If preview troubleshooting points to selector mismatch or page-load/navigation issues, these Playwright CLI helpers are faster than repeatedly re-running the full flow:
+
+```bash
+npm run debug:open -- https://www.example.com
+npm run debug:codegen -- https://www.example.com
+```
+
+- `debug:open`: headed browser for quick visual checks (redirect loops, WAF pages, blocked content).
+- `debug:codegen`: interactive selector capture for fixing `event-schema.json` selectors.
 
 ## Product Boundary
 

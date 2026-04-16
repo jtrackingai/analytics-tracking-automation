@@ -11,6 +11,7 @@ import {
   getExportBundleRoot,
   getSkillBundles,
   loadSourceSkillManifest,
+  normalizeCopiedMarkdownContent,
   normalizeSkillContent,
   SKILL_FAMILY_NAME,
   SKILL_FAMILY_REPOSITORY,
@@ -41,6 +42,49 @@ function copyDirectory(relativeSourcePath, targetPath) {
       copyDirectory(path.relative(repoRoot, sourceEntryPath), targetEntryPath);
       continue;
     }
+    ensureDir(path.dirname(targetEntryPath));
+    fs.copyFileSync(sourceEntryPath, targetEntryPath);
+  }
+}
+
+function copyDirectoryForProfile(relativeSourcePath, targetPath, profile) {
+  const sourcePath = path.join(repoRoot, relativeSourcePath);
+  for (const entry of fs.readdirSync(sourcePath, { withFileTypes: true })) {
+    const sourceEntryPath = path.join(sourcePath, entry.name);
+    const targetEntryPath = path.join(targetPath, entry.name);
+    if (entry.isDirectory()) {
+      copyDirectoryForProfile(path.relative(repoRoot, sourceEntryPath), targetEntryPath, profile);
+      continue;
+    }
+
+    ensureDir(path.dirname(targetEntryPath));
+    if (entry.name.endsWith('.md')) {
+      const normalized = normalizeCopiedMarkdownContent(
+        fs.readFileSync(sourceEntryPath, 'utf8'),
+        { profile },
+      );
+      fs.writeFileSync(targetEntryPath, normalized);
+      continue;
+    }
+
+    fs.copyFileSync(sourceEntryPath, targetEntryPath);
+  }
+}
+
+function copyTreeWithFilter(sourcePath, targetPath, predicate) {
+  for (const entry of fs.readdirSync(sourcePath, { withFileTypes: true })) {
+    const sourceEntryPath = path.join(sourcePath, entry.name);
+    const relativeEntryPath = path.relative(repoRoot, sourceEntryPath);
+    if (!predicate(relativeEntryPath, entry)) {
+      continue;
+    }
+
+    const targetEntryPath = path.join(targetPath, entry.name);
+    if (entry.isDirectory()) {
+      copyTreeWithFilter(sourceEntryPath, targetEntryPath, predicate);
+      continue;
+    }
+
     ensureDir(path.dirname(targetEntryPath));
     fs.copyFileSync(sourceEntryPath, targetEntryPath);
   }
@@ -79,11 +123,16 @@ function parseArgs(argv) {
 }
 
 function buildBundleMetadata(bundle, familyVersion, profile) {
+  const repositoryUrl = `https://github.com/${SKILL_FAMILY_REPOSITORY}`;
   const metadata = {
     name: bundle.name,
     kind: bundle.kind,
     familyName: SKILL_FAMILY_NAME,
     repository: SKILL_FAMILY_REPOSITORY,
+    homepage: repositoryUrl,
+    sourceUrl: repositoryUrl,
+    issuesUrl: `${repositoryUrl}/issues`,
+    license: 'Apache-2.0',
     familyVersion,
   };
 
@@ -101,6 +150,49 @@ function buildBundleMetadata(bundle, familyVersion, profile) {
   };
 }
 
+function buildCliPackageJson() {
+  const sourcePackage = JSON.parse(readText('package.json'));
+  return {
+    name: sourcePackage.name,
+    version: sourcePackage.version,
+    description: sourcePackage.description,
+    private: true,
+    main: sourcePackage.main,
+    bin: sourcePackage.bin,
+    scripts: {
+      postinstall: sourcePackage.scripts?.postinstall,
+    },
+    dependencies: sourcePackage.dependencies,
+  };
+}
+
+function copyBundledCliRuntime(outputPath, profile) {
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return;
+  }
+
+  copyDirectory('runtime/cli-runtime', path.join(outputPath, 'runtime', 'cli-runtime'));
+
+  const cliPackagePath = path.join(outputPath, 'runtime', 'cli-package');
+  const distTargetPath = path.join(cliPackagePath, 'dist');
+  const distSourcePath = path.join(repoRoot, 'dist');
+
+  copyTreeWithFilter(distSourcePath, distTargetPath, relativeEntryPath => {
+    return !relativeEntryPath.startsWith('dist/skill-bundles')
+      && !relativeEntryPath.startsWith('dist/clawhub-skill-bundles')
+      && !relativeEntryPath.endsWith('.d.ts')
+      && !relativeEntryPath.endsWith('.d.ts.map')
+      && !relativeEntryPath.endsWith('.js.map')
+      && !relativeEntryPath.endsWith('.DS_Store');
+  });
+
+  writeFile(
+    path.join(cliPackagePath, 'package.json'),
+    `${JSON.stringify(buildCliPackageJson(), null, 2)}\n`,
+  );
+  copyFile('package-lock.json', path.join(cliPackagePath, 'package-lock.json'));
+}
+
 function exportBundle(bundle, profile) {
   const outputPath = path.join(repoRoot, getProfileBundleOutputPath(bundle, profile));
   ensureDir(outputPath);
@@ -112,8 +204,9 @@ function exportBundle(bundle, profile) {
   copyFile(bundle.metadataFile, path.join(outputPath, 'agents', 'openai.yaml'));
 
   getCopiedDirectoriesForProfile(bundle, profile).forEach(copyEntry => {
-    copyDirectory(copyEntry.source, path.join(outputPath, copyEntry.target));
+    copyDirectoryForProfile(copyEntry.source, path.join(outputPath, copyEntry.target), profile);
   });
+  copyBundledCliRuntime(outputPath, profile);
 
   return {
     name: bundle.name,

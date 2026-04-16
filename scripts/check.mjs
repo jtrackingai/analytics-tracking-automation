@@ -310,7 +310,7 @@ exportedBundleFiles.forEach(relativePath => {
   assertFileExists(relativePath, 'Self-contained skill bundles should export the installable skill surface.');
 });
 clawhubExportedBundleFiles.forEach(relativePath => {
-  assertFileExists(relativePath, 'ClawHub exports should keep a docs-only publish surface.');
+  assertFileExists(relativePath, 'ClawHub exports should keep an installable slim publish surface.');
 });
 if (readText('VERSION').trim() !== readJson('package.json').version) {
   console.error('Check failed: VERSION must match package.json version.');
@@ -449,6 +449,14 @@ if ('updateSource' in clawhubExportedRootBundleMetadata) {
 assertFileMissing(
   path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'runtime', 'skill-runtime', 'update-check.mjs'),
   'ClawHub exports should not ship the updater runtime.',
+);
+assertFileExists(
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'runtime', 'cli-runtime', 'run-cli.mjs'),
+  'ClawHub exports should ship the bundled CLI bootstrap.',
+);
+assertFileExists(
+  path.join(getExportBundleRoot(EXPORT_PROFILE_CLAWHUB), 'analytics-tracking-automation', 'runtime', 'cli-package', 'dist', 'cli.js'),
+  'ClawHub exports should ship the compiled bundled CLI runtime.',
 );
 [
   'analytics-tracking-automation/references/architecture.md',

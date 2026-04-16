@@ -2662,6 +2662,12 @@ program
         );
       }
 
+      if (failedChecks.length > 0) {
+        const firstFailedUrl = failedChecks[0]?.url || siteAnalysis.rootUrl;
+        console.log(`\n🧪 Playwright CLI tip (page load debug):`);
+        console.log(`   npm run debug:open -- ${firstFailedUrl}`);
+      }
+
       let injectGTM = false;
 
       if (gtmPublicId === 'UNKNOWN') {
@@ -2789,6 +2795,18 @@ program
     }
     if (trackingHealth.unexpectedEventNames.length > 0) {
       console.log(`   Unexpected events: ${trackingHealth.unexpectedEventNames.join(', ')}`);
+    }
+
+    const selectorMismatchFailure = previewResult.results.find(result =>
+      !result.fired && result.failureCategory === 'selector_mismatch',
+    );
+    if (selectorMismatchFailure) {
+      const codegenUrl = siteAnalysis.rootUrl;
+      console.log(`\n🧪 Playwright CLI tip (selector debug):`);
+      console.log(`   npm run debug:codegen -- ${codegenUrl}`);
+      if (selectorMismatchFailure.event.elementSelector) {
+        console.log(`   First failing selector: ${selectorMismatchFailure.event.elementSelector}`);
+      }
     }
 
     if (!hasBlockingTrackingHealth(trackingHealth) && previewResult.totalFired > 0) {

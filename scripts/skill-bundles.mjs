@@ -8,6 +8,7 @@ export const SKILL_FAMILY_NAME = 'analytics-tracking-automation';
 export const SKILL_FAMILY_REPOSITORY = 'jtrackingai/analytics-tracking-automation';
 export const EXPORT_PROFILE_PORTABLE = 'portable';
 export const EXPORT_PROFILE_CLAWHUB = 'clawhub';
+const BUNDLED_CLI_COMMAND = 'node "./runtime/cli-runtime/run-cli.mjs"';
 
 const AUTO_UPDATE_BOOTSTRAP_START = '<!-- analytics-tracking-automation auto-update bootstrap:start -->';
 const AUTO_UPDATE_BOOTSTRAP_END = '<!-- analytics-tracking-automation auto-update bootstrap:end -->';
@@ -101,6 +102,74 @@ function listFilesRecursive(rootDir) {
   return files;
 }
 
+function listBundledCliFiles(repoRoot) {
+  const expected = [];
+  const cliRuntimeRoot = path.join(repoRoot, 'runtime', 'cli-runtime');
+  const cliRuntimeFiles = listFilesRecursive(cliRuntimeRoot);
+  cliRuntimeFiles.forEach(sourceFile => {
+    expected.push({
+      sourceRoot: cliRuntimeRoot,
+      sourceFile,
+      targetRoot: path.join('runtime', 'cli-runtime'),
+    });
+  });
+
+  const distPaths = [
+    path.join(repoRoot, 'dist', 'cli.js'),
+    path.join(repoRoot, 'dist', 'telemetry.js'),
+    path.join(repoRoot, 'dist', 'crawler'),
+    path.join(repoRoot, 'dist', 'generator'),
+    path.join(repoRoot, 'dist', 'gtm'),
+    path.join(repoRoot, 'dist', 'reporter'),
+    path.join(repoRoot, 'dist', 'shopify'),
+    path.join(repoRoot, 'dist', 'workflow'),
+  ];
+  distPaths.forEach(sourcePath => {
+    if (!fs.existsSync(sourcePath)) {
+      return;
+    }
+
+    const files = fs.statSync(sourcePath).isDirectory()
+      ? listFilesRecursive(sourcePath)
+      : [sourcePath];
+    files
+      .filter(filePath => {
+        const relativePath = path.relative(repoRoot, filePath);
+        return !relativePath.endsWith('.d.ts')
+          && !relativePath.endsWith('.d.ts.map')
+          && !relativePath.endsWith('.js.map')
+          && !relativePath.endsWith('.DS_Store')
+          && (relativePath.endsWith('.js') || relativePath.endsWith('.json'));
+      })
+      .forEach(sourceFile => {
+        expected.push({
+          sourceRoot: path.join(repoRoot, 'dist'),
+          sourceFile,
+          targetRoot: path.join('runtime', 'cli-package', 'dist'),
+        });
+      });
+  });
+
+  expected.push({
+    relativeFile: 'package.json',
+    targetRoot: path.join('runtime', 'cli-package'),
+  });
+  expected.push({
+    relativeFile: 'package-lock.json',
+    targetRoot: path.join('runtime', 'cli-package'),
+  });
+
+  return expected;
+}
+
+function listBundledCliFilesForProfile(repoRoot, profile) {
+  if (profile === EXPORT_PROFILE_CLAWHUB) {
+    return [];
+  }
+
+  return listBundledCliFiles(repoRoot);
+}
+
 export function listExpectedExportedFiles(repoRoot, manifest, options = {}) {
   const profile = options.profile || EXPORT_PROFILE_PORTABLE;
   const exportRoot = getExportBundleRoot(profile);
@@ -112,6 +181,10 @@ export function listExpectedExportedFiles(repoRoot, manifest, options = {}) {
     expected.add(path.join(bundleRoot, 'VERSION'));
     expected.add(path.join(bundleRoot, 'bundle.json'));
     expected.add(path.join(bundleRoot, 'agents', 'openai.yaml'));
+    listBundledCliFilesForProfile(repoRoot, profile).forEach(entry => {
+      const relativeFile = entry.relativeFile || path.relative(entry.sourceRoot, entry.sourceFile);
+      expected.add(path.join(bundleRoot, entry.targetRoot, relativeFile));
+    });
 
     getCopiedDirectoriesForProfile(bundle, profile).forEach(copyEntry => {
       const sourceRoot = path.join(repoRoot, copyEntry.source);
@@ -137,6 +210,28 @@ export function normalizePublicCommand(content) {
     .replaceAll('the repo-local wrapper `./event-tracking`', 'the public command `event-tracking`')
     .replaceAll('repo-local wrapper `./event-tracking`', 'public command `event-tracking`')
     .replaceAll('./event-tracking', 'event-tracking');
+}
+
+export function normalizeBundledCommand(content) {
+  return normalizePublicCommand(content)
+    .replaceAll(
+      'Use the public command `event-tracking` in this repository. If `dist/cli.js` is missing, run `npm run build` first.',
+      `Use the bundled command \`${BUNDLED_CLI_COMMAND}\` from this installed skill bundle. It bootstraps the packaged CLI on first use.`,
+    )
+    .replaceAll(
+      'Use the public command `event-tracking` for CLI commands. If the command is unavailable, install or link the package first.',
+      `Use the bundled command \`${BUNDLED_CLI_COMMAND}\` for CLI commands from this installed skill bundle. It bootstraps the packaged CLI on first use.`,
+    )
+    .replaceAll(/`event-tracking\b([^`]*)`/g, (_, suffix) => `\`${BUNDLED_CLI_COMMAND}${suffix}\``)
+    .replaceAll('./event-tracking', BUNDLED_CLI_COMMAND)
+    .replaceAll(/^([ \t]*)event-tracking /gm, (_, prefix) => `${prefix}${BUNDLED_CLI_COMMAND} `)
+    .replaceAll('Use the public command:', 'Use the bundled command:')
+    .replaceAll('the public command `event-tracking`', `the bundled command \`${BUNDLED_CLI_COMMAND}\``)
+    .replaceAll('public command `event-tracking`', `bundled command \`${BUNDLED_CLI_COMMAND}\``);
+}
+
+export function normalizeCopiedMarkdownContent(content, options = {}) {
+  return normalizePublicCommand(content);
 }
 
 function injectAfterFrontmatter(content, insertedContent) {
@@ -199,9 +294,10 @@ function buildPortableAutoUpdateBootstrap(bundleName) {
 
 export function normalizeSkillContent(bundle, content, options = {}) {
   const profile = options.profile || EXPORT_PROFILE_PORTABLE;
+  const normalizeCommand = normalizePublicCommand;
   const normalizedContent = bundle.kind === 'umbrella'
-    ? normalizePublicCommand(content)
-    : normalizePublicCommand(content)
+    ? normalizeCommand(content)
+    : normalizeCommand(content)
       .replaceAll('../../references/', 'references/')
       .replaceAll('../../references/architecture.md', 'references/architecture.md');
 

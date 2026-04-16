@@ -5,8 +5,7 @@ compatibility: >
   Requires Node.js 18+, npm, and Playwright Chromium for browser-backed steps.
   Analyze, selector validation, preview, and GTM sync must run outside sandboxed
   environments. GTM sync uses interactive Google OAuth and caches credentials in
-  the artifact directory. Optional anonymous telemetry is opt-in and can be
-  disabled with DO_NOT_TRACK=1 or EVENT_TRACKING_TELEMETRY=0.
+  the artifact directory. Optional anonymous telemetry is opt-in.
 ---
 
 # Analytics Tracking Automation
@@ -55,6 +54,7 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 ## Shared Contract
 
 - Use the repo-local wrapper `./event-tracking` in this repository. If `dist/cli.js` is missing, run `npm run build` first.
+- For public/ClawHub installs, you must run this first before any `event-tracking` command: `npx skills add jtrackingai/analytics-tracking-automation`.
 - Keep one artifact directory per site at `<output-root>/<url-slug>`.
 - If the user already provides an artifact directory or one of its files, resume from the earliest unmet prerequisite instead of restarting from `analyze`.
 - Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.

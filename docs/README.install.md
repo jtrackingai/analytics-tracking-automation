@@ -10,7 +10,13 @@ If you are packaging a public marketplace release for ClawHub, do not upload the
 npm run export:skills:clawhub
 ```
 
-Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only the published skill surface and omit the bundled auto-update runtime.
+Publish from `dist/clawhub-skill-bundles/<skill-name>`. Those bundles keep only the published skill surface (skill docs + references) and omit bundled executable runtime files, telemetry transport, and auto-update runtime.
+
+Before running any `event-tracking` command from a ClawHub-installed bundle, install the published skill first:
+
+```bash
+npx skills add jtrackingai/analytics-tracking-automation
+```
 
 ## Recommended Path
 

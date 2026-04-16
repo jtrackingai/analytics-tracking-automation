@@ -166,7 +166,7 @@ test('portable and ClawHub export profiles keep different packaging boundaries',
   );
   assert.ok(
     getCopiedDirectoriesForProfile(rootBundle, EXPORT_PROFILE_CLAWHUB).every(entry => entry.target !== 'runtime'),
-    'ClawHub exports should omit the runtime directory.',
+    'ClawHub exports should omit the updater runtime from copied source directories.',
   );
 
   const portableSkill = normalizeSkillContent(rootBundle, readText(rootBundle.skillFile), { profile: EXPORT_PROFILE_PORTABLE });
@@ -184,8 +184,16 @@ test('portable and ClawHub export profiles keep different packaging boundaries',
     'Portable exports should include the updater runtime.',
   );
   assert.ok(
-    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/')),
-    'ClawHub exports should not include runtime files.',
+    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/cli-runtime/')),
+    'ClawHub exports should not include the bundled CLI bootstrap runtime.',
+  );
+  assert.ok(
+    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/cli-package/')),
+    'ClawHub exports should not include bundled CLI package files.',
+  );
+  assert.ok(
+    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/skill-runtime/')),
+    'ClawHub exports should not include updater runtime files.',
   );
   assert.ok(
     clawhubFiles.some(relativePath => relativePath.startsWith('dist/clawhub-skill-bundles/analytics-tracking-automation/')),
