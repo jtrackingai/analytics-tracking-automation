@@ -26,6 +26,12 @@ export interface TagVerificationResult {
   failureCategory?: FailureCategory;
 }
 
+interface InteractionOutcome {
+  attempted: boolean;
+  clicked: boolean;
+  prepared: boolean;
+}
+
 export interface PreviewResult {
   siteUrl: string;
   previewStartedAt: string;
@@ -61,6 +67,27 @@ interface PageVerificationPlan {
   applicableEvents: GA4Event[];
 }
 
+// Ignore GA4 auto/enhanced-measurement noise in preview drift reporting.
+// `audiences` is treated as ignorable based on observed Google tag/GA audience
+// processing behavior; this is an inference from preview traffic, not an official
+// GA4 auto-collected event classification.
+const IGNORABLE_UNEXPECTED_EVENT_NAMES = new Set([
+  'audiences',
+  'click',
+  'file_download',
+  'first_visit',
+  'form_start',
+  'form_submit',
+  'page_view',
+  'scroll',
+  'session_start',
+  'user_engagement',
+  'video_complete',
+  'video_progress',
+  'video_start',
+  'view_search_results',
+]);
+
 function getEventIdentity(event: Pick<GA4Event, 'eventName' | 'triggerType' | 'elementSelector' | 'pageUrlPattern'>): string {
   return [
     event.eventName,
@@ -81,6 +108,14 @@ function parseGA4Payload(body: string): Record<string, string> {
     // ignore parse errors
   }
   return params;
+}
+
+function normalizeEventName(eventName: string | undefined): string {
+  return (eventName || 'unknown').trim();
+}
+
+export function isIgnorableUnexpectedEventName(eventName: string | undefined): boolean {
+  return IGNORABLE_UNEXPECTED_EVENT_NAMES.has(normalizeEventName(eventName));
 }
 
 function inferFailureReason(event: GA4Event): { reason: string; category: FailureCategory } {
@@ -152,6 +187,12 @@ const PREVIEW_PAGE_SETTLE_MS = 4000;
 const PREVIEW_RESTORE_TIMEOUT_MS = 10000;
 const PREVIEW_RESTORE_FALLBACK_TIMEOUT_MS = 10000;
 const PREVIEW_RESTORE_SETTLE_MS = 2000;
+const PREVIEW_INJECTION_SCRIPT_TIMEOUT_MS = 8000;
+const PREVIEW_INJECTION_READY_TIMEOUT_MS = 8000;
+const PREVIEW_INJECTION_SETTLE_MS = 1000;
+const PREVIEW_INJECTION_MAX_ATTEMPTS = 2;
+const PREVIEW_CLICK_WAIT_MS = 1800;
+const PREVIEW_CLICK_RETRY_WAIT_MS = 2500;
 
 async function navigateForPreviewPreflight(page: Page, url: string): Promise<void> {
   try {
@@ -414,25 +455,78 @@ async function attemptCustomEventDetection(
 async function injectPreviewContainer(page: Page, gtmScriptUrl: string | null, gtmPublicId: string): Promise<boolean> {
   if (!gtmScriptUrl || page.isClosed()) return false;
 
-  await page.evaluate((args: { src: string; containerId: string }) => {
-    if ((window as any).google_tag_manager?.[args.containerId]) return;
-    (window as any).dataLayer = (window as any).dataLayer || [];
-    (window as any).dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
-    const s = document.createElement('script');
-    s.async = false;
-    s.src = args.src;
-    (document.head || document.documentElement).appendChild(s);
-  }, { src: gtmScriptUrl, containerId: gtmPublicId }).catch(() => {});
+  for (let attempt = 1; attempt <= PREVIEW_INJECTION_MAX_ATTEMPTS; attempt++) {
+    const scriptState = await page.evaluate(async (args: {
+      src: string;
+      containerId: string;
+      scriptTimeoutMs: number;
+    }) => {
+      if ((window as any).google_tag_manager?.[args.containerId]) {
+        return 'already_ready';
+      }
 
-  const gtmReady = await page.waitForFunction((containerId: string) => {
-    return Boolean((window as any).google_tag_manager?.[containerId]);
-  }, gtmPublicId, { timeout: 2500 }).then(() => true).catch(() => false);
+      const existing = Array.from(document.querySelectorAll<HTMLScriptElement>('script[data-jtracking-preview="1"]'))
+        .find(script => script.src === args.src);
+      if (existing) {
+        return await new Promise<'loaded' | 'error' | 'timeout'>(resolve => {
+          const timeoutId = window.setTimeout(() => resolve('timeout'), args.scriptTimeoutMs);
+          const finish = (value: 'loaded' | 'error' | 'timeout') => {
+            window.clearTimeout(timeoutId);
+            resolve(value);
+          };
 
-  if (!gtmReady) {
-    await page.waitForLoadState('networkidle', { timeout: 1000 }).catch(() => {});
+          existing.addEventListener('load', () => finish('loaded'), { once: true });
+          existing.addEventListener('error', () => finish('error'), { once: true });
+        });
+      }
+
+      (window as any).dataLayer = (window as any).dataLayer || [];
+      (window as any).dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
+
+      const script = document.createElement('script');
+      script.async = false;
+      script.src = args.src;
+      script.dataset.jtrackingPreview = '1';
+
+      return await new Promise<'loaded' | 'error' | 'timeout'>(resolve => {
+        const timeoutId = window.setTimeout(() => resolve('timeout'), args.scriptTimeoutMs);
+        const finish = (value: 'loaded' | 'error' | 'timeout') => {
+          window.clearTimeout(timeoutId);
+          resolve(value);
+        };
+
+        script.addEventListener('load', () => finish('loaded'), { once: true });
+        script.addEventListener('error', () => finish('error'), { once: true });
+        (document.head || document.documentElement).appendChild(script);
+      });
+    }, {
+      src: gtmScriptUrl,
+      containerId: gtmPublicId,
+      scriptTimeoutMs: PREVIEW_INJECTION_SCRIPT_TIMEOUT_MS,
+    }).catch(() => 'error');
+
+    const gtmReady = await page.waitForFunction((containerId: string) => {
+      return Boolean((window as any).google_tag_manager?.[containerId]);
+    }, gtmPublicId, { timeout: PREVIEW_INJECTION_READY_TIMEOUT_MS }).then(() => true).catch(() => false);
+
+    if (gtmReady) {
+      await page.waitForTimeout(PREVIEW_INJECTION_SETTLE_MS).catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {});
+      return true;
+    }
+
+    if (attempt < PREVIEW_INJECTION_MAX_ATTEMPTS) {
+      console.warn(`    [GTM inject retry ${attempt + 1}/${PREVIEW_INJECTION_MAX_ATTEMPTS}] script=${scriptState}`);
+      await page.evaluate((src: string) => {
+        for (const script of Array.from(document.querySelectorAll<HTMLScriptElement>('script[data-jtracking-preview="1"]'))) {
+          if (script.src === src) script.remove();
+        }
+      }, gtmScriptUrl).catch(() => {});
+      await page.waitForTimeout(500).catch(() => {});
+    }
   }
 
-  return gtmReady;
+  return false;
 }
 
 async function restoreOriginalPage(
@@ -465,21 +559,61 @@ async function clickVisibleMatchAt(page: Page, selector: string, candidateIndex:
 
   const candidate = locator.nth(candidateIndex);
   const isVisible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
-  if (!isVisible) return false;
-
-  try {
-    await candidate.scrollIntoViewIfNeeded().catch(() => {});
-    await candidate.click({ timeout: 2000, force: false, noWaitAfter: true });
-    return true;
-  } catch {
+  if (isVisible) {
     try {
       await candidate.scrollIntoViewIfNeeded().catch(() => {});
-      await candidate.click({ timeout: 2000, force: true, noWaitAfter: true });
+      await candidate.click({ timeout: 2000, force: false, noWaitAfter: true });
       return true;
     } catch {
-      return false;
+      try {
+        await candidate.scrollIntoViewIfNeeded().catch(() => {});
+        await candidate.click({ timeout: 2000, force: true, noWaitAfter: true });
+        return true;
+      } catch {
+        try {
+          await candidate.scrollIntoViewIfNeeded().catch(() => {});
+          const box = await candidate.boundingBox();
+          if (box && box.width > 0 && box.height > 0) {
+            await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+            await page.mouse.down();
+            await page.mouse.up();
+            return true;
+          }
+        } catch {
+          // Fall through to the DOM-level fallback below.
+        }
+      }
     }
   }
+
+  const clickedViaFallback = await candidate.evaluate((el) => {
+    const target = (el.closest('a, button, input, label, summary, [role="button"]') || el) as HTMLElement | null;
+    if (!target) return false;
+
+    const rect = target.getBoundingClientRect();
+    const style = window.getComputedStyle(target);
+    if (rect.width <= 0 || rect.height <= 0 || style.visibility === 'hidden' || style.display === 'none') {
+      return false;
+    }
+
+    target.scrollIntoView({ block: 'center', inline: 'center' });
+    target.focus?.();
+    if (typeof target.click === 'function') {
+      target.click();
+      return true;
+    }
+    for (const type of ['mouseover', 'mousedown', 'mouseup', 'click']) {
+      target.dispatchEvent(new MouseEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        view: window,
+      }));
+    }
+    return true;
+  }).catch(() => false);
+
+  return clickedViaFallback;
 }
 
 async function clickVisibleMatchesUntilEvent(
@@ -632,6 +766,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
   const browserVerificationStartedAt = Date.now();
 
   const allFiredEvents: FiredEvent[] = [];
+  const interactionOutcomes = new Map<string, InteractionOutcome>();
   const ownsBrowser = !args.browser;
   const browser: Browser = args.browser || await chromium.launch({ headless: true });
 
@@ -655,7 +790,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
 
       for (const hitLine of hits) {
         const params = parseGA4Payload(urlQuery + (hitLine ? '&' + hitLine : ''));
-        const eventName = params['en'] || params['event_name'] || 'unknown';
+        const eventName = normalizeEventName(params['en'] || params['event_name'] || 'unknown');
         const pageUrl = params['dl'] || params['page_location'] || url.toString();
 
         allFiredEvents.push({
@@ -794,6 +929,8 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
             const beforeHits = getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length;
             let afterHits = beforeHits;
             let interactionPerformed = false;
+            let interactionPrepared = false;
+            let interactionClicked = false;
 
             if (event.triggerType === 'page_view') {
               afterHits = await waitForHitCount(
@@ -809,10 +946,16 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
               const cleanSelector = event.elementSelector.replace(/:contains\([^)]*\)/g, '').trim();
               const filledInputs = await fillNearbyInputsForSelector(page, cleanSelector);
               if (filledInputs > 0) {
+                interactionPrepared = true;
                 console.log(`      schema prepare: ${event.eventName} (filled ${filledInputs} input${filledInputs > 1 ? 's' : ''})`);
               }
               const submitted = await attemptFormSubmit(page, cleanSelector);
               if (!submitted) {
+                interactionOutcomes.set(eventId, {
+                  attempted: true,
+                  clicked: false,
+                  prepared: interactionPrepared,
+                });
                 console.log(`      schema skip: ${event.eventName}`);
                 continue;
               }
@@ -827,33 +970,41 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
               let { clicked, afterHits: clickHits } = await clickVisibleMatchesUntilEvent(page, cleanSelector, {
                 beforeHits,
                 getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
-                waitMs: 1200,
+                waitMs: PREVIEW_CLICK_WAIT_MS,
                 eventName: event.eventName,
               });
               afterHits = clickHits;
               if (clicked) {
                 interactionPerformed = true;
+                interactionClicked = true;
               }
 
               if (afterHits <= beforeHits) {
                 const filledInputs = await fillNearbyInputsForSelector(page, cleanSelector);
                 if (filledInputs > 0) {
+                  interactionPrepared = true;
                   console.log(`      schema prepare: ${event.eventName} (filled ${filledInputs} input${filledInputs > 1 ? 's' : ''})`);
                   const retryResult = await clickVisibleMatchesUntilEvent(page, cleanSelector, {
                     beforeHits,
                     getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
-                    waitMs: 1500,
+                    waitMs: PREVIEW_CLICK_RETRY_WAIT_MS,
                     eventName: event.eventName,
                   });
                   clicked = retryResult.clicked || clicked;
                   if (clicked) {
                     interactionPerformed = true;
+                    interactionClicked = true;
                     afterHits = retryResult.afterHits;
                   }
                 }
               }
 
               if (!clicked) {
+                interactionOutcomes.set(eventId, {
+                  attempted: true,
+                  clicked: false,
+                  prepared: interactionPrepared,
+                });
                 console.log(`      schema skip: ${event.eventName}`);
                 continue;
               }
@@ -864,6 +1015,12 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
                 800,
               );
             }
+
+            interactionOutcomes.set(eventId, {
+              attempted: true,
+              clicked: interactionClicked,
+              prepared: interactionPrepared,
+            });
 
             if (afterHits > beforeHits) {
               console.log(`      schema hit: ${event.eventName}`);
@@ -917,20 +1074,40 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
   const results: TagVerificationResult[] = managedEvents.map(event => {
     const matchedFired = getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents);
     const fired = matchedFired.length > 0;
+    const eventId = getEventIdentity(event);
+    const interaction = interactionOutcomes.get(eventId);
+    const baselineFailure = inferFailureReason(event);
+    let failure = baselineFailure;
+
+    if (!fired && baselineFailure.category === 'requires_login') {
+      failure = baselineFailure;
+    } else if (!fired && interaction?.clicked) {
+      failure = {
+        reason: 'Preview clicked a matching element, but no GA4 hit was observed. Check GTM trigger filters, URL conditions, and tag firing.',
+        category: 'config_error',
+      };
+    } else if (!fired && interaction?.prepared) {
+      failure = {
+        reason: 'Preview interacted with nearby inputs, but no matching GA4 hit was observed. Check GTM trigger filters and the actual page URL during interaction.',
+        category: 'config_error',
+      };
+    }
 
     return {
       event,
       fired,
       firedCount: matchedFired.length,
       firedEvents: matchedFired,
-      failureReason: fired ? undefined : inferFailureReason(event).reason,
-      failureCategory: fired ? undefined : inferFailureReason(event).category,
+      failureReason: fired ? undefined : failure.reason,
+      failureCategory: fired ? undefined : failure.category,
     };
   });
 
   // Also include any unexpected GA4 events that fired
   const expectedEventNames = new Set(schema.events.map(event => event.eventName));
-  const unexpectedFired = allFiredEvents.filter(fe => !expectedEventNames.has(fe.eventName));
+  const unexpectedFired = allFiredEvents.filter(fe =>
+    !expectedEventNames.has(fe.eventName) && !isIgnorableUnexpectedEventName(fe.eventName),
+  );
   if (unexpectedFired.length > 0) {
     console.log(`  ℹ️  ${unexpectedFired.length} additional events fired (not in schema): ${[...new Set(unexpectedFired.map(e => e.eventName))].join(', ')}`);
   }

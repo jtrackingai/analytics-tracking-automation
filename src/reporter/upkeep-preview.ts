@@ -2,6 +2,7 @@ import { EventSchema } from '../generator/event-schema';
 import { PreviewResult } from '../gtm/preview';
 import { SchemaDiffResult } from './schema-diff';
 import { TrackingHealthReport } from './tracking-health';
+import { isIgnorableUnexpectedEventName } from '../gtm/preview';
 
 export type UpkeepPreviewStatus = 'healthy' | 'failure' | 'drift' | 'not_observable';
 
@@ -128,10 +129,10 @@ export function assessUpkeepPreview(args: {
 
   const unexpectedNames = new Set<string>();
   for (const name of args.health?.unexpectedEventNames || []) {
-    if (name) unexpectedNames.add(name);
+    if (name && !isIgnorableUnexpectedEventName(name)) unexpectedNames.add(name);
   }
   for (const fired of args.previewResult?.unexpectedFiredEvents || []) {
-    if (fired.eventName) unexpectedNames.add(fired.eventName);
+    if (fired.eventName && !isIgnorableUnexpectedEventName(fired.eventName)) unexpectedNames.add(fired.eventName);
   }
   for (const unexpectedName of unexpectedNames) {
     items.push({
@@ -198,4 +199,3 @@ export function decideUpkeepNextStep(args: {
     reason: 'No meaningful schema delta and no blocking preview drift/failures were found.',
   };
 }
-
