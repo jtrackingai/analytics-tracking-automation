@@ -14,6 +14,8 @@ Use this skill for verification and optional publish handoff.
 
 ## Workflow
 
+If the telemetry consent prompt appears and no prior choice is recorded, stop and follow [../../references/telemetry-consent.md](../../references/telemetry-consent.md) before continuing.
+
 Run preview:
 
 ```bash

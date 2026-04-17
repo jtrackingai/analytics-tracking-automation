@@ -16,6 +16,8 @@ One of:
 
 ## Workflow
 
+If the telemetry consent prompt appears and no prior choice is recorded, stop and follow [../../references/telemetry-consent.md](../../references/telemetry-consent.md) before continuing.
+
 Run the live baseline step before schema preparation whenever the site has a real GTM container installed:
 
 ```bash

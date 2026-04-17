@@ -32,6 +32,8 @@ Favor event definitions that are business-meaningful, implementation-ready, and 
 Do not preserve weak legacy patterns just for continuity.
 Do not inflate the schema with events that add little reporting or decision value.
 
+If the telemetry consent prompt appears and no prior choice is recorded, stop and follow [../../references/telemetry-consent.md](../../references/telemetry-consent.md) before continuing.
+
 If schema context is not prepared yet:
 
 ```bash
