@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import test from 'node:test';
@@ -10,6 +11,9 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 const {
   buildTelemetryPayload,
   sanitizeTelemetryParams,
+  getTelemetryConsentMessage,
+  getTelemetryConsentStatus,
+  ensureTelemetryConsentGate,
 } = require(path.join(repoRoot, 'dist', 'telemetry.js'));
 
 test('telemetry payload uses GA4 Measurement Protocol shape', () => {
@@ -61,4 +65,86 @@ test('telemetry rejects unsupported event names', () => {
     () => buildTelemetryPayload('client-123', 'raw_url_seen', {}),
     /Unsupported telemetry event/,
   );
+});
+
+test('telemetry consent message keeps friendly purpose and privacy boundaries', () => {
+  const message = getTelemetryConsentMessage();
+
+  assert.match(message, /collect limited anonymous usage data while you use the tool/i);
+  assert.match(message, /only used for product optimization and reliability/i);
+  assert.match(message, /does not include sensitive page content or sensitive business data/i);
+  assert.match(message, /If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it/i);
+  assert.match(message, /If you choose no, we save that choice in local config and continue the workflow normally without diagnostics/i);
+  assert.match(message, /do not send full URLs, page paths, query strings, file paths, GTM\/GA IDs, selectors, OAuth data, raw errors, or page content/i);
+  assert.match(message, /site hostname and high-level workflow metadata, which may reveal the domain you worked on/i);
+  assert.match(message, /You can decline and continue using the tool/i);
+  assert.doesNotMatch(message, /environment variable|env override|pre-create telemetry\.json/i);
+});
+
+test('telemetry consent is undecided when config file is missing', () => {
+  const originalConfig = process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  const missingFile = path.join(repoRoot, 'tmp', 'missing-telemetry.json');
+
+  process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = missingFile;
+
+  const status = getTelemetryConsentStatus();
+
+  assert.equal(status.status, 'undecided');
+  assert.equal(status.source, 'missing_config');
+  assert.equal(status.configFile, missingFile);
+
+  if (originalConfig === undefined) delete process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  else process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = originalConfig;
+});
+
+test('telemetry consent status is decided only by telemetry config file contents', () => {
+  const originalConfig = process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  const configFile = path.join(repoRoot, 'tmp', 'disabled-telemetry.json');
+
+  fs.mkdirSync(path.dirname(configFile), { recursive: true });
+  fs.writeFileSync(configFile, JSON.stringify({
+    telemetryEnabled: false,
+    clientId: 'test-client',
+    decidedAt: '2026-04-08T00:00:00.000Z',
+  }));
+  process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = configFile;
+
+  const status = getTelemetryConsentStatus();
+
+  assert.equal(status.status, 'disabled');
+  assert.equal(status.source, 'config');
+
+  fs.rmSync(configFile, { force: true });
+  if (originalConfig === undefined) delete process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  else process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = originalConfig;
+});
+
+test('telemetry consent gate blocks non-interactive runs when config is missing', async () => {
+  const originalConfig = process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  const originalStdinIsTTY = process.stdin.isTTY;
+  const originalStderrIsTTY = process.stderr.isTTY;
+  const missingFile = path.join(repoRoot, 'tmp', 'missing-telemetry-gate.json');
+
+  process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = missingFile;
+  Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+  Object.defineProperty(process.stderr, 'isTTY', { value: false, configurable: true });
+
+  await assert.rejects(
+    ensureTelemetryConsentGate(),
+    error => {
+      assert.match(error.message, /User consent is required before starting this workflow/);
+      assert.match(error.message, /Run this command in an interactive terminal and answer the diagnostics consent prompt/);
+      assert.match(error.message, /only used for product optimization and reliability/);
+      assert.match(error.message, /If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it/);
+      assert.match(error.message, /If you choose no, we save that choice in local config and continue the workflow normally without diagnostics/);
+      assert.match(error.message, /site hostname and high-level workflow metadata, which may reveal the domain you worked on/);
+      assert.doesNotMatch(error.message, /environment variable|env override|pre-create telemetry\.json/i);
+      return true;
+    },
+  );
+
+  Object.defineProperty(process.stdin, 'isTTY', { value: originalStdinIsTTY, configurable: true });
+  Object.defineProperty(process.stderr, 'isTTY', { value: originalStderrIsTTY, configurable: true });
+  if (originalConfig === undefined) delete process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  else process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = originalConfig;
 });

@@ -57,15 +57,38 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-function runCli(args) {
+function writeDisabledTelemetryConfig(root) {
+  const file = path.join(root, 'telemetry.json');
+  writeJson(file, {
+    telemetryEnabled: false,
+    clientId: 'test-client',
+    decidedAt: '2026-04-08T00:00:00.000Z',
+  });
+  return file;
+}
+
+function runCli(args, envOverrides = {}) {
+  const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-telemetry-'));
+  const telemetryConfigFile = writeDisabledTelemetryConfig(outputRoot);
+  const env = {
+    ...process.env,
+    NO_COLOR: '1',
+    EVENT_TRACKING_TELEMETRY_CONFIG_FILE: telemetryConfigFile,
+    ...envOverrides,
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete env[key];
+    }
+  }
+
   const result = spawnSync(cliPath, args, {
     cwd: repoRoot,
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      NO_COLOR: '1',
-    },
+    env,
   });
+
+  fs.rmSync(outputRoot, { recursive: true, force: true });
 
   return {
     ...result,
@@ -925,6 +948,33 @@ test('run-new-setup treats a missing extensionless artifact path as the target d
   assert.equal(state.mode, 'new_setup');
   assert.equal(state.inputScope, 'initial launch');
   assert.equal(fs.existsSync(path.join(outputRoot, 'workflow-state.json')), false);
+});
+
+test('run-new-setup blocks non-interactive workflow when telemetry consent is undecided', t => {
+  const outputRoot = makeTempDir();
+  t.after(() => fs.rmSync(outputRoot, { recursive: true, force: true }));
+
+  const artifactDir = path.join(outputRoot, 'www_jtracking_ai');
+  const missingConsentFile = path.join(outputRoot, 'missing-telemetry.json');
+  const result = runCli([
+    'run-new-setup',
+    'https://www.jtracking.ai',
+    '--output-root',
+    outputRoot,
+  ], {
+    EVENT_TRACKING_TELEMETRY_CONFIG_FILE: missingConsentFile,
+  });
+
+  assert.notEqual(result.status, 0, result.combinedOutput);
+  assert.match(result.combinedOutput, /Telemetry consent gate blocked run-new-setup/);
+  assert.match(result.combinedOutput, /collect limited anonymous usage data while you use the tool/i);
+  assert.match(result.combinedOutput, /Run this command in an interactive terminal and answer the diagnostics consent prompt/);
+  assert.match(result.combinedOutput, /only used for product optimization and reliability/i);
+  assert.match(result.combinedOutput, /If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it/i);
+  assert.match(result.combinedOutput, /If you choose no, we save that choice in local config and continue the workflow normally without diagnostics/i);
+  assert.match(result.combinedOutput, /site hostname and high-level workflow metadata, which may reveal the domain you worked on/i);
+  assert.doesNotMatch(result.combinedOutput, /environment variable|env override|pre-create telemetry\.json/i);
+  assert.equal(fs.existsSync(path.join(artifactDir, 'workflow-state.json')), false);
 });
 
 test('run-new-setup derives the site artifact directory from a URL and output root', t => {

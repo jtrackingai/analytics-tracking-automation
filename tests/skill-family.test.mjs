@@ -103,6 +103,7 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   const rootSkill = readText('SKILL.md');
   const architectureRef = readText('references/architecture.md');
   const skillMapRef = readText('references/skill-map.md');
+  const telemetryConsentRef = readText('references/telemetry-consent.md');
 
   assert.match(rootSkill, /## Conversation Intake/, 'Root skill should define a conversation-first intake section for chat entry.');
   assert.match(rootSkill, /Do not ask the user to choose between internal workflow metadata flags and `analyze`\./, 'Root skill should keep intent routing separate from command selection.');
@@ -113,6 +114,14 @@ test('umbrella skill keeps Shopify handoff and phase routing rules explicit', ()
   assert.match(rootSkill, /Use `\.\/event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear\./, 'Root skill should keep the status entry point visible.');
   assert.match(rootSkill, /\[skill-map\.md\]\(references\/skill-map\.md\)/, 'Root skill should reference the install-shaped skill map path directly.');
   assert.match(rootSkill, /\[architecture\.md\]\(references\/architecture\.md\)/, 'Root skill should reference the install-shaped architecture path directly.');
+  assert.match(rootSkill, /\[telemetry-consent\.md\]\(references\/telemetry-consent\.md\)/, 'Root skill should reference the telemetry consent interaction contract directly.');
+  assert.match(rootSkill, /Explain the purpose, what `yes` does, what `no` does, and the remaining privacy tradeoff before asking the user to reply `yes` or `no`\./, 'Root skill should require the full telemetry consent explanation before asking for a decision.');
+  assert.match(rootSkill, /Do not ask a bare `yes`\/`no` question with no context/i, 'Root skill should explicitly forbid bare yes\\/no telemetry prompts.');
+  assert.doesNotMatch(rootSkill, /stop and ask the user to choose `yes` or `no`\./i, 'Root skill should not reduce telemetry consent handling to a bare yes\\/no instruction.');
+  assert.match(telemetryConsentRef, /single-source interaction contract/i, 'The telemetry consent reference should establish a single-source contract.');
+  assert.match(telemetryConsentRef, /what `yes` does/i, 'The telemetry consent reference should explain the yes outcome.');
+  assert.match(telemetryConsentRef, /what `no` does/i, 'The telemetry consent reference should explain the no outcome.');
+  assert.match(telemetryConsentRef, /do not ask only "`yes` or `no`\?" with no context/i, 'The telemetry consent reference should forbid context-free yes/no prompts.');
   assert.match(architectureRef, /\[\.\.\/SKILL\.md\]\(\.\.\/SKILL\.md\)/, 'The runtime architecture reference should link to the root skill with bundle-safe relative paths.');
   assert.match(skillMapRef, /# Skill Map Reference/, 'The runtime skill-map reference should exist in source.');
 });

@@ -9,10 +9,24 @@ const CONFIG_DIR = path.join(os.homedir(), '.config', 'analytics-tracking-automa
 const CONFIG_FILE = path.join(CONFIG_DIR, 'telemetry.json');
 const TELEMETRY_TIMEOUT_MS = 800;
 const SESSION_ID = crypto.randomUUID();
+const TELEMETRY_CONSENT_MESSAGE =
+  'To improve this skill, we collect limited anonymous usage data while you use the tool. ' +
+  'This is only used for product optimization and reliability, and does not include sensitive page content or sensitive business data. ' +
+  'We do not send full URLs, page paths, query strings, file paths, GTM/GA IDs, selectors, OAuth data, raw errors, or page content. ' +
+  'We do send the site hostname and high-level workflow metadata, which may reveal the domain you worked on. ' +
+  'If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it. ' +
+  'If you choose no, we save that choice in local config and continue the workflow normally without diagnostics. ' +
+  'You can decline and continue using the tool.';
 
 const ALLOWED_EVENTS = new Set([
   'site_analyzed',
+  'page_groups_confirmed',
+  'live_gtm_analyzed',
+  'live_gtm_verified',
+  'schema_validated',
+  'schema_context_prepared',
   'schema_confirmed',
+  'gtm_config_generated',
   'gtm_sync_completed',
   'preview_completed',
   'gtm_publish_completed',
@@ -66,7 +80,13 @@ const ALLOWED_PARAM_NAMES = new Set([
 
 export type TelemetryEventName =
   | 'site_analyzed'
+  | 'page_groups_confirmed'
+  | 'live_gtm_analyzed'
+  | 'live_gtm_verified'
+  | 'schema_validated'
+  | 'schema_context_prepared'
   | 'schema_confirmed'
+  | 'gtm_config_generated'
   | 'gtm_sync_completed'
   | 'preview_completed'
   | 'gtm_publish_completed'
@@ -92,6 +112,12 @@ interface TelemetryPayload {
   events: TelemetryPayloadEvent[];
 }
 
+export interface TelemetryConsentStatus {
+  status: 'enabled' | 'disabled' | 'undecided';
+  source: 'config' | 'missing_config' | 'invalid_config';
+  configFile: string;
+}
+
 let consentPromise: Promise<TelemetryConfig | null> | null = null;
 
 function getConfigFile(): string {
@@ -102,12 +128,8 @@ function getEndpoint(): string {
   return process.env.EVENT_TRACKING_TELEMETRY_ENDPOINT?.trim() || DEFAULT_ENDPOINT;
 }
 
-function parseBooleanEnv(value: string | undefined): boolean | null {
-  const normalized = value?.trim().toLowerCase();
-  if (!normalized) return null;
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
-  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
-  return null;
+function configFileExists(): boolean {
+  return fs.existsSync(getConfigFile());
 }
 
 function readConfig(): TelemetryConfig | null {
@@ -138,7 +160,7 @@ function writeConfig(config: TelemetryConfig): void {
 function makeConfig(telemetryEnabled: boolean): TelemetryConfig {
   return {
     telemetryEnabled,
-    clientId: process.env.EVENT_TRACKING_TELEMETRY_CLIENT_ID?.trim() || crypto.randomUUID(),
+    clientId: crypto.randomUUID(),
     decidedAt: new Date().toISOString(),
   };
 }
@@ -150,8 +172,7 @@ function isInteractive(): boolean {
 async function promptForConsent(): Promise<boolean> {
   return new Promise(resolve => {
     process.stderr.write(
-      '\nAllow analytics-tracking-automation to send anonymous usage telemetry? ' +
-      'This includes the analyzed site hostname but never full URLs, paths, query strings, file paths, GTM/GA IDs, selectors, OAuth data, or raw errors. (yes/no): ',
+      `\n${TELEMETRY_CONSENT_MESSAGE} (yes/no): `,
     );
     const iface = readline.createInterface({ input: process.stdin, output: process.stderr });
     iface.question('', answer => {
@@ -161,33 +182,61 @@ async function promptForConsent(): Promise<boolean> {
   });
 }
 
-async function getTelemetryConfig(): Promise<TelemetryConfig | null> {
-  const doNotTrack = parseBooleanEnv(process.env.DO_NOT_TRACK);
-  if (doNotTrack === true) return null;
+export function getTelemetryConsentMessage(): string {
+  return TELEMETRY_CONSENT_MESSAGE;
+}
 
-  const forced = parseBooleanEnv(process.env.EVENT_TRACKING_TELEMETRY);
-  if (forced !== null) {
-    if (!forced) return null;
-    const existing = readConfig();
-    if (existing) {
-      const config = { ...existing, telemetryEnabled: true };
-      if (!existing.telemetryEnabled) writeConfig(config);
-      return config;
-    }
-    const config = makeConfig(true);
-    writeConfig(config);
-    return config;
+export function getTelemetryConsentStatus(): TelemetryConsentStatus {
+  const configFile = getConfigFile();
+  const existing = readConfig();
+  if (existing) {
+    return {
+      status: existing.telemetryEnabled ? 'enabled' : 'disabled',
+      source: 'config',
+      configFile,
+    };
   }
 
-  const existing = readConfig();
-  if (existing) return existing.telemetryEnabled ? existing : null;
+  return {
+    status: 'undecided',
+    source: configFileExists() ? 'invalid_config' : 'missing_config',
+    configFile,
+  };
+}
 
-  if (!isInteractive()) return null;
+export async function ensureTelemetryConsentGate(): Promise<TelemetryConfig | null> {
+  const status = getTelemetryConsentStatus();
+  if (status.status !== 'undecided') {
+    const existing = readConfig();
+    if (existing) return existing.telemetryEnabled ? existing : null;
+    if (status.status === 'enabled') {
+      const config = makeConfig(true);
+      writeConfig(config);
+      return config;
+    }
+    return null;
+  }
+
+  if (!isInteractive()) {
+    throw new Error(
+      `User consent is required before starting this workflow because ${status.configFile} ` +
+      `${status.source === 'invalid_config' ? 'is invalid' : 'does not exist'}. ` +
+      'Run this command in an interactive terminal and answer the diagnostics consent prompt. ' +
+      `The prompt says: "${TELEMETRY_CONSENT_MESSAGE}"`,
+    );
+  }
 
   const enabled = await promptForConsent();
   const config = makeConfig(enabled);
   writeConfig(config);
   return enabled ? config : null;
+}
+
+async function getTelemetryConfig(): Promise<TelemetryConfig | null> {
+  const existing = readConfig();
+  if (existing) return existing.telemetryEnabled ? existing : null;
+
+  return null;
 }
 
 async function resolveTelemetryConfig(): Promise<TelemetryConfig | null> {

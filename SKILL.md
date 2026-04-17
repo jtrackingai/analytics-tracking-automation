@@ -5,7 +5,9 @@ compatibility: >
   Requires Node.js 18+, npm, and Playwright Chromium for browser-backed steps.
   Analyze, selector validation, preview, and GTM sync must run outside sandboxed
   environments. GTM sync uses interactive Google OAuth and caches credentials in
-  the artifact directory. Optional anonymous telemetry is opt-in.
+  the artifact directory. Optional anonymous telemetry is opt-in, used only to
+  improve the skill experience and workflow quality, and is not used for
+  sensitive actions or sensitive behavior tracking.
 ---
 
 # Analytics Tracking Automation
@@ -60,6 +62,10 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 - Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.
 - Use `./event-tracking runs <output-root>` when the artifact directory is unknown but the output root is known.
 - Prefer high-level entry commands for user-facing flows: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`.
+- Before first workflow command, honor the telemetry consent gate. Treat telemetry consent as a required user-choice checkpoint for the session. Follow [telemetry-consent.md](references/telemetry-consent.md) as the single-source interaction contract. If consent is missing or invalid, explain both outcomes before asking: `yes` stores local consent and enables high-level anonymous usage diagnostics for future runs, while `no` stores local decline and continues the workflow without sending diagnostics.
+- Never decide telemetry consent on the user's behalf. Telemetry consent is recorded only in the local telemetry config file, not through enable/disable environment-variable overrides.
+- If the user agrees, continue through the interactive prompt so it can record local consent. If the user declines, continue through the prompt so it can record the local decline. The workflow can continue either way, but the choice must come from the user.
+- If the current run surfaces a telemetry prompt and the user has not answered it yet, stop and follow [telemetry-consent.md](references/telemetry-consent.md) before asking for a choice. Explain the purpose, what `yes` does, what `no` does, and the remaining privacy tradeoff before asking the user to reply `yes` or `no`. Do not ask a bare `yes`/`no` question with no context, do not answer the prompt for them, and do not continue to the next workflow command until the user makes that choice.
 - Treat workflow mode metadata as an internal workflow-state layer, not a user-facing command surface.
 - Treat Playwright-backed and OAuth-prompting steps as non-sandbox commands by default. In practice: `analyze`, `validate-schema --check-selectors`, `preview`, and `sync`.
 - Run prompt-driven GTM sync with an interactive TTY from the start unless exact `--account-id`, `--container-id`, and `--workspace-id` values are already confirmed.
@@ -110,6 +116,7 @@ If only the root skill is available, follow the same routing logic directly and 
   - GTM target selection (account/container/workspace during `sync`)
   - publish decision (before `publish`)
 - If confirmation is missing or ambiguous, stop and ask; do not auto-proceed.
+- Treat telemetry consent the same way as other explicit approval gates: if the user has not chosen `yes` or `no`, stop and ask instead of making the decision for them.
 - A broad request such as "full workflow", "全流程", "end-to-end", or "continue all the way" is scope authorization only. It does not count as checkpoint approval.
 - Never record checkpoint approval on the user's behalf with `confirm-page-groups --yes` or `confirm-schema --yes` unless the user explicitly confirms that checkpoint in the current turn.
 - When live GTM containers are detected on the site, do not bypass the live baseline review before schema generation.
@@ -139,3 +146,4 @@ When a phase or the full workflow ends, keep the closeout answer-first:
 - [architecture.md](references/architecture.md) for lifecycle, checkpoints, and resume semantics
 - [output-contract.md](references/output-contract.md) for artifact files and gate semantics
 - [shopify-workflow.md](references/shopify-workflow.md) for Shopify-specific branch expectations
+- [telemetry-consent.md](references/telemetry-consent.md) for the telemetry consent gate wording and behavior contract
