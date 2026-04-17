@@ -28,7 +28,7 @@ If comparing against an older preview run, pass the previous health baseline:
 ./event-tracking preview <artifact-dir>/event-schema.json --context-file <artifact-dir>/gtm-context.json --baseline <previous-tracking-health.json>
 ```
 
-Run `preview` outside sandboxed environments by default. Do not first attempt the Playwright browser step inside the sandbox and then retry after it is intercepted.
+`preview` launches a real Chromium via Playwright and exercises the live site to fire GA4/GTM events for verification. Run it in an environment that permits outbound network and local browser execution; environments that restrict either tend to cause Playwright to hang or fail silently rather than return a clean error.
 
 Then interpret:
 

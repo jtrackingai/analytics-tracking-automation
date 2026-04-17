@@ -41,8 +41,8 @@ If account/container/workspace IDs are already confirmed, skip interactive selec
 - Do not bypass schema approval unless the user explicitly wants `--force`.
 - Treat custom dimensions as a blocking checklist before sync/publish.
 - Never auto-select GTM account, container, or workspace for the user.
-- Run OAuth-triggering commands outside sandboxed environments.
-- Run `sync` with an interactive TTY from the start whenever it may prompt for OAuth, account, container, workspace, or new workspace name. Do not first try non-interactive sync and then retry after it fails.
+- `sync` calls Google's official GTM API via interactive OAuth. The consent flow needs outbound HTTP and a local loopback callback on `127.0.0.1`; run `sync` in an environment that permits both.
+- Run `sync` with an interactive TTY from the start whenever it may prompt for OAuth consent, account, container, workspace, or new workspace name. Non-interactive invocation will fail at the first prompt.
 - Use non-interactive `sync` only when exact `--account-id`, `--container-id`, and `--workspace-id` values are already confirmed.
 
 ## Required Output

@@ -168,7 +168,7 @@ After writing the schema, validate it with selector checking enabled (default):
 ```
 
 The `--check-selectors` flag launches a browser and verifies each CSS selector actually matches a DOM element on the live site. **Always use it** — it catches selector mismatches before they silently fail in production.
-Run selector checking outside sandboxed environments by default. Do not first attempt the Playwright check inside the sandbox and then retry after interception.
+Selector checking launches a real Chromium via Playwright, so it needs outbound HTTP and local browser execution. Run it in an environment that permits both; restricted environments tend to make Playwright hang or fail silently rather than return a clean error.
 
 If the site requires login to access some pages (and those selectors can't be verified), note which events are behind auth walls and manually verify them during the preview step.
 

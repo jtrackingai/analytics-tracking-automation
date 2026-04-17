@@ -21,7 +21,7 @@ In this repository, use the repo-root wrapper:
 ./event-tracking analyze <url> --output-root <output-root>
 ```
 
-Run `analyze` outside sandboxed environments by default. Do not first attempt the Playwright crawl inside the sandbox and then retry after it is intercepted.
+`analyze` launches a real Chromium via Playwright to fetch the target site over HTTP. Run it in an environment that permits outbound network and local browser execution; environments that restrict either tend to cause Playwright to hang or fail silently rather than return a clean error.
 Before `run-new-setup` or `analyze`, if the tool needs a telemetry consent answer and no prior choice is already recorded, stop and follow [../../references/telemetry-consent.md](../../references/telemetry-consent.md). Do not choose on the user's behalf, and do not continue until they answer.
 
 Partial mode:

@@ -44,7 +44,7 @@ If the site has a live GTM container installed, make sure `tracking-live-gtm` ha
 
 Then:
 
-Run `validate-schema --check-selectors` outside sandboxed environments by default. Do not first attempt the Playwright selector check inside the sandbox and then retry after it is intercepted.
+`validate-schema --check-selectors` launches a real Chromium via Playwright to test each schema selector against the live site. Run it in an environment that permits outbound network and local browser execution; environments that restrict either tend to cause Playwright to hang or fail silently rather than return a clean error.
 
 ```bash
 ./event-tracking validate-schema <artifact-dir>/event-schema.json --check-selectors

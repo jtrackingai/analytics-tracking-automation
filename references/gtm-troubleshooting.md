@@ -9,16 +9,16 @@
 
 ## Execution Environment
 
-- Run Playwright-driven commands outside the sandbox by default: `analyze`, `validate-schema --check-selectors`, and `preview`.
-- Run `sync` outside the sandbox as well.
-- If one of those commands was started in a sandbox and behaves oddly, rerun it outside the sandbox before debugging the site or GTM setup itself.
-- Run prompt-driven `sync` in an interactive TTY from the start. If the command cannot use a TTY, provide all target IDs explicitly with `--account-id`, `--container-id`, and `--workspace-id`; do not first run non-interactive sync and wait for a prompt failure.
+- `analyze`, `validate-schema --check-selectors`, and `preview` each launch a real Chromium via Playwright and need outbound HTTP plus local browser execution.
+- `sync` calls Google's official GTM API via interactive OAuth and needs outbound HTTP plus a local loopback callback on `127.0.0.1` to receive Google's consent redirect.
+- If any of those commands behaves oddly in an environment that restricts one of those capabilities, rerun it in an environment that provides them before debugging the site or GTM setup itself.
+- Run prompt-driven `sync` in an interactive TTY from the start. If the command cannot use a TTY, provide all target IDs explicitly with `--account-id`, `--container-id`, and `--workspace-id`; non-interactive invocation will otherwise fail at the first prompt.
 
 ## OAuth Failure
 
 - Ensure GTM API is enabled: https://console.cloud.google.com/apis/library/tagmanager.googleapis.com
-- Run `sync` outside the sandbox. The OAuth flow may need to bind a local callback on `127.0.0.1`, which sandboxed environments commonly block.
-- If you see an error like `listen EPERM 127.0.0.1`, treat it as an environment issue rather than a GTM configuration problem and rerun the authorization step outside the sandbox.
+- The OAuth flow binds a local callback on `127.0.0.1` to receive Google's consent redirect. Environments that restrict local port binding will block this step.
+- If you see an error like `listen EPERM 127.0.0.1`, treat it as an environment capability issue rather than a GTM configuration problem and rerun the authorization step in an environment that permits local loopback binding.
 - Clear cached tokens and retry:
   ```bash
   ./event-tracking auth-clear --context-file <artifact-dir>/gtm-context.json
@@ -30,7 +30,7 @@
 
 ## No Events Fire in Preview
 
-- Confirm `preview` was run outside the sandbox before investigating selectors or GTM config.
+- Confirm `preview` was run in an environment that permits outbound HTTP and local browser execution before investigating selectors or GTM config.
 - The `preview` command automatically detects whether the target site has GTM installed.
 - If the container is not found, it will prompt to either re-sync to the correct container or inject GTM during preview.
 - If zero events fire even with injection, verify that the GTM public ID in `gtm-context.json` is correct.

@@ -68,7 +68,17 @@ These files support approvals, restore points, indexing, and auditability. They 
 | `mode-transitions.jsonl` | Append-only workflow mode transition audit log (from/to mode, run IDs, optional reason) |
 | `versions/` | Per-run snapshots of generated artifacts, keyed by run ID |
 | `versions/<run-id>/run-manifest.json` | Run metadata (`runId`, mode, sub-mode, run start, input scope) plus per-file snapshot records |
-| `credentials.json` | URL-scoped Google OAuth token cache reused by `sync`, `preview`, and `publish` for this artifact directory; never commit this file |
+| `credentials.json` | Google OAuth refresh token that the user generated via Google's own consent screen, scoped to GTM write access. Stored per artifact directory and read locally by `sync`, `preview`, and `publish` when they call the official GTM API. See *Local Secrets* below. |
+
+## Local Secrets
+
+`credentials.json` is a user-owned credential artifact, handled the same way command-line tools like `gh` and `aws` handle local tokens:
+
+- The token is produced by the user completing Google's own OAuth consent screen interactively; the skill never reads, scrapes, or derives it from anywhere else.
+- The granted scope is GTM container read/write only. It is not a full-account token and cannot read mail, drive, contacts, or any other Google service.
+- The file is stored inside the per-site artifact directory on the user's machine and is read only by `sync`, `preview`, and `publish` when those commands call `googleapis.tagmanager`. It is never transmitted to any third-party service, telemetry endpoint, or this skill's authors.
+- Rotate or revoke at any time with `./event-tracking auth-clear --context-file <artifact-dir>/gtm-context.json` (per artifact) or `./event-tracking auth-clear --output-root <output-root>` (every cached token under a root).
+- The file is gitignored; do not commit it, just as you would not commit `~/.config/gh/hosts.yml` or `~/.aws/credentials`.
 
 ## Editing Between Steps
 

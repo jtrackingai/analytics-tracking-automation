@@ -19,9 +19,8 @@ Set these expectations with the user before crawling:
 
 ## Execution Environment
 
-- Run `analyze` outside sandboxed environments by default.
-- Do not first attempt the Playwright crawl inside the sandbox and then retry after interception.
-- Sandboxed browser/network restrictions are a common cause of empty crawls, timeouts, and incomplete page loads.
+- `analyze` launches a real Chromium via Playwright and fetches the target site over HTTP. Run it in an environment that permits outbound network and local browser execution.
+- Environments that restrict either tend to cause Playwright to hang or fail silently; empty crawls, timeouts, and incomplete page loads are common symptoms.
 
 ## Crawl Outcomes
 
