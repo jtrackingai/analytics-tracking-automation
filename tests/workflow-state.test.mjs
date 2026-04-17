@@ -27,15 +27,38 @@ function readJson(file) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-function runCli(args) {
+function writeDisabledTelemetryConfig(root) {
+  const file = path.join(root, 'telemetry.json');
+  writeJson(file, {
+    telemetryEnabled: false,
+    clientId: 'test-client',
+    decidedAt: '2026-04-03T00:00:00.000Z',
+  });
+  return file;
+}
+
+function runCli(args, envOverrides = {}) {
+  const outputRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'event-tracking-telemetry-'));
+  const telemetryConfigFile = writeDisabledTelemetryConfig(outputRoot);
+  const env = {
+    ...process.env,
+    NO_COLOR: '1',
+    EVENT_TRACKING_TELEMETRY_CONFIG_FILE: telemetryConfigFile,
+    ...envOverrides,
+  };
+  for (const [key, value] of Object.entries(env)) {
+    if (value === undefined) {
+      delete env[key];
+    }
+  }
+
   const result = spawnSync(cliPath, args, {
     cwd: repoRoot,
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      NO_COLOR: '1',
-    },
+    env,
   });
+
+  fs.rmSync(outputRoot, { recursive: true, force: true });
 
   return {
     ...result,

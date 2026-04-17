@@ -190,6 +190,7 @@ test('skill contract stays aligned with manifest, phase skills, and public docs'
   const manifest = readJson(contract.sourceManifest);
   const docsSkillMap = readText('docs/skills.md');
   const runtimeSkillMap = readText('references/skill-map.md');
+  const telemetryConsentRef = readText('references/telemetry-consent.md');
   const rootSkill = readText('SKILL.md');
   const cliCommands = parseCliCommands();
 
@@ -243,6 +244,25 @@ test('skill contract stays aligned with manifest, phase skills, and public docs'
       assert.match(skillContent, new RegExp(`\\./event-tracking ${phaseContract.defaultNextCommand}\\b`), `${bundle.skillFile} should mention default next command ${phaseContract.defaultNextCommand}.`);
     }
   }
+
+  assert.match(telemetryConsentRef, /Required Asking Style/, 'Telemetry consent reference should define the required asking style.');
+  assert.match(telemetryConsentRef, /Required Behaviors/, 'Telemetry consent reference should define required behaviors.');
+  assert.match(telemetryConsentRef, /Prohibited Behaviors/, 'Telemetry consent reference should define prohibited behaviors.');
+});
+
+test('discovery skill inherits telemetry consent wording from the shared reference', () => {
+  const discoverySkill = readText('skills/tracking-discover/SKILL.md');
+
+  assert.match(
+    discoverySkill,
+    /\[\.\.\/\.\.\/references\/telemetry-consent\.md\]\(\.\.\/\.\.\/references\/telemetry-consent\.md\)/,
+    'Discovery skill should reference the shared telemetry consent contract.',
+  );
+  assert.doesNotMatch(
+    discoverySkill,
+    /stop and ask the user to choose `yes` or `no`\./i,
+    'Discovery skill should no longer reduce telemetry consent to a bare yes/no instruction.',
+  );
 });
 
 test('routing eval fixtures stay aligned with the skill contract', () => {

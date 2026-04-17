@@ -108,6 +108,7 @@ import {
 import {
   captureCommandCompleted,
   captureTelemetry,
+  ensureTelemetryConsentGate,
 } from './telemetry';
 
 const program = new Command();
@@ -210,6 +211,16 @@ function assertSyncCanRunWithoutInteractivePrompts(opts: {
     'sync requires an interactive terminal for Google OAuth/account/container/workspace selection. ' +
     'Run sync with TTY enabled, or provide --account-id, --container-id, and --workspace-id to run non-interactively.',
   );
+}
+
+async function requireTelemetryGate(commandName: string): Promise<void> {
+  try {
+    await ensureTelemetryConsentGate();
+  } catch (error) {
+    console.error(`\n❌ Telemetry consent gate blocked ${commandName}.`);
+    console.error(`   ${(error as Error).message}`);
+    process.exit(1);
+  }
 }
 
 async function prompt(question: string): Promise<string> {
@@ -1637,6 +1648,7 @@ program
     subMode?: string;
     inputScope?: string;
   }) => {
+    await requireTelemetryGate('analyze');
     const commandStartedAt = Date.now();
     const isPartial = !!opts.urls;
     const partialUrls = opts.urls
@@ -1740,6 +1752,8 @@ program
   .description('Confirm the current page groups in site-analysis.json before schema preparation')
   .option('--yes', 'Skip confirmation prompt and mark the current page groups as approved')
   .action(async (analysisFile: string, opts: { yes?: boolean }) => {
+    await requireTelemetryGate('confirm-page-groups');
+    const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(analysisFile);
     const analysis = readJsonFile<SiteAnalysis>(resolvedFile);
 
@@ -1760,6 +1774,11 @@ program
       const answer = await prompt('\nConfirm these page groups for schema preparation? (yes/no): ');
       if (answer.toLowerCase() !== 'yes') {
         console.log('Page-group confirmation cancelled.');
+        await captureCommandCompleted('confirm-page-groups', commandStartedAt, 'cancelled', {
+          checkpoint: existingReview.status === 'confirmed' && existingReview.confirmedHash === currentHash
+            ? 'group_approved'
+            : 'page_groups_ready',
+        });
         return;
       }
     }
@@ -1787,6 +1806,20 @@ program
     if (workflowState.nextCommand) {
       console.log(`\nNext step: ${workflowState.nextCommand}`);
     }
+
+    await captureTelemetry('page_groups_confirmed', {
+      command_name: 'confirm-page-groups',
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      page_count: analysis.pages.length,
+      discovered_url_count: analysis.discoveredUrls.length,
+    });
+    await captureCommandCompleted('confirm-page-groups', commandStartedAt, 'success', {
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 program
@@ -1795,6 +1828,8 @@ program
   .option('--gtm-id <ids>', 'Comma-separated GTM public IDs to analyze instead of the IDs detected during crawl')
   .option('--primary-container-id <id>', 'Primary live GTM container to use as the schema comparison baseline')
   .action(async (analysisFile: string, opts: { gtmId?: string; primaryContainerId?: string }) => {
+    await requireTelemetryGate('analyze-live-gtm');
+    const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(analysisFile);
     const analysis = readJsonFile<SiteAnalysis>(resolvedFile);
     const artifactDir = path.dirname(resolvedFile);
@@ -1829,6 +1864,23 @@ program
     if (workflowState.nextCommand) {
       console.log(`   Next step: ${workflowState.nextCommand}`);
     }
+
+    await captureTelemetry('live_gtm_analyzed', {
+      command_name: 'analyze-live-gtm',
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+      site_hostname: hostnameFromUrl(analysis.rootUrl),
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      gtm_detected: liveAnalysis.containers.length > 0,
+      page_count: analysis.pages.length,
+      schema_event_count: liveAnalysis.aggregatedEvents.length,
+      warning_count: liveAnalysis.warnings.length,
+    });
+    await captureCommandCompleted('analyze-live-gtm', commandStartedAt, 'success', {
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 program
@@ -1838,6 +1890,8 @@ program
   .option('--gtm-id <ids>', 'Comma-separated GTM public IDs to analyze if live-gtm-analysis.json is missing')
   .option('--primary-container-id <id>', 'Primary live GTM container to treat as the verification baseline')
   .action(async (analysisFile: string, opts: { liveGtmAnalysis?: string; gtmId?: string; primaryContainerId?: string }) => {
+    await requireTelemetryGate('verify-live-gtm');
+    const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(analysisFile);
     const analysis = readJsonFile<SiteAnalysis>(resolvedFile);
     const artifactDir = path.dirname(resolvedFile);
@@ -1881,6 +1935,23 @@ program
       if (liveVerification.skippedEvents.length > 0) {
         console.log(`   Skipped live events: ${liveVerification.skippedEvents.map(item => item.eventName).join(', ')}`);
       }
+      await captureTelemetry('live_gtm_verified', {
+        command_name: 'verify-live-gtm',
+        mode: getModeFromArtifact(artifactDir),
+        checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || 'verified',
+        site_hostname: hostnameFromUrl(analysis.rootUrl),
+        status: 'success',
+        duration_ms: Date.now() - commandStartedAt,
+        total_expected: liveVerification.result.totalExpected,
+        total_fired: liveVerification.result.totalFired,
+        health_grade: readTrackingHealthReport(liveVerification.healthFile)?.grade,
+        health_score: readTrackingHealthReport(liveVerification.healthFile)?.score,
+        unexpected_event_count: readTrackingHealthReport(liveVerification.healthFile)?.unexpectedEventNames.length,
+      });
+      await captureCommandCompleted('verify-live-gtm', commandStartedAt, 'success', {
+        mode: getModeFromArtifact(artifactDir),
+        checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || 'verified',
+      });
     } catch (error) {
       console.error(`\n❌ Failed to verify live GTM setup: ${(error as Error).message}`);
       process.exit(1);
@@ -1901,6 +1972,8 @@ program
     'Optional Shopify storefront password for selector checking on password-protected dev stores',
   )
   .action(async (schemaFile: string, opts: { checkSelectors?: boolean; storefrontPassword?: string }) => {
+    await requireTelemetryGate('validate-schema');
+    const commandStartedAt = Date.now();
     const schema = readJsonFile<EventSchema>(schemaFile);
     const issues = validateEventSchema(schema);
     const storefrontPassword = opts.storefrontPassword?.trim() || process.env.SHOPIFY_STOREFRONT_PASSWORD?.trim();
@@ -1968,6 +2041,20 @@ program
     }
 
     if (errs.length > 0) process.exit(1);
+
+    const mode = getModeFromArtifact(path.dirname(path.resolve(schemaFile)));
+    await captureTelemetry('schema_validated', {
+      command_name: 'validate-schema',
+      mode,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      schema_event_count: schema.events.length,
+      validation_error_count: errs.length,
+      validation_warning_count: warns.length,
+    });
+    await captureCommandCompleted('validate-schema', commandStartedAt, 'success', {
+      mode,
+    });
   });
 
 program
@@ -1975,6 +2062,7 @@ program
   .description('Confirm the current event-schema.json before GTM config generation')
   .option('--yes', 'Skip confirmation prompt and mark the current schema as approved')
   .action(async (schemaFile: string, opts: { yes?: boolean }) => {
+    await requireTelemetryGate('confirm-schema');
     const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(schemaFile);
     const schema = readJsonFile<EventSchema>(resolvedFile);
@@ -2087,6 +2175,8 @@ program
   .command('prepare-schema <site-analysis-file>')
   .description('Compress site-analysis.json into a smaller schema-context.json for AI event generation')
   .action(async (analysisFile: string) => {
+    await requireTelemetryGate('prepare-schema');
+    const commandStartedAt = Date.now();
     const resolvedFile = path.resolve(analysisFile);
     const analysis = readJsonFile<SiteAnalysis>(resolvedFile);
     const artifactDir = path.dirname(resolvedFile);
@@ -2208,7 +2298,23 @@ program
       console.log(`   Review details: ${shopifyReviewFile || '—'}`);
     }
     console.log(`   Workflow state: ${path.join(artifactDir, WORKFLOW_STATE_FILE)}`);
-    refreshAndIndexWorkflowState(artifactDir);
+    const workflowState = refreshAndIndexWorkflowState(artifactDir);
+
+    await captureTelemetry('schema_context_prepared', {
+      command_name: 'prepare-schema',
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+      site_hostname: hostnameFromUrl(analysis.rootUrl),
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      page_count: analysis.pages.length,
+      discovered_url_count: analysis.discoveredUrls.length,
+      schema_event_count: context.groups.reduce((sum, group) => sum + group.elements.length, 0),
+    });
+    await captureCommandCompleted('prepare-schema', commandStartedAt, 'success', {
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 // STEP 3: Generate GTM config
@@ -2220,6 +2326,8 @@ program
   .option('--google-tag-id <id>', 'Optional Google tag ID (GT-/G-/AW-...). Used for the configuration tag target when provided')
   .option('--force', 'Generate GTM config without a current schema confirmation')
   .action(async (schemaFile: string, opts: { measurementId?: string; googleTagId?: string; outputDir?: string; force?: boolean }) => {
+    await requireTelemetryGate('generate-gtm');
+    const commandStartedAt = Date.now();
     const schema = readJsonFile<EventSchema>(schemaFile);
     const artifactDir = path.dirname(path.resolve(schemaFile));
     const activeMode = getModeFromArtifact(artifactDir);
@@ -2319,6 +2427,24 @@ program
       console.log(`${'═'.repeat(60)}`);
     }
     console.log(`   Workflow state: ${path.join(dir, WORKFLOW_STATE_FILE)}`);
+
+    const refreshedWorkflowState = refreshAndIndexWorkflowState(dir);
+    await captureTelemetry('gtm_config_generated', {
+      command_name: 'generate-gtm',
+      mode: refreshedWorkflowState.mode,
+      checkpoint: refreshedWorkflowState.currentCheckpoint,
+      status: 'success',
+      duration_ms: Date.now() - commandStartedAt,
+      schema_event_count: schema.events.length,
+      custom_dimension_count: quota.customDimensions,
+      validation_error_count: errs.length,
+      validation_warning_count: warns.length,
+      forced: !!opts.force,
+    });
+    await captureCommandCompleted('generate-gtm', commandStartedAt, 'success', {
+      mode: refreshedWorkflowState.mode,
+      checkpoint: refreshedWorkflowState.currentCheckpoint,
+    });
   });
 
 // STEP 4+5: Auth, select workspace, and sync
@@ -2341,6 +2467,7 @@ program
     dryRun?: boolean;
     forceMode?: boolean;
   }) => {
+    await requireTelemetryGate('sync');
     const commandStartedAt = Date.now();
     const config = readJsonFile<GTMContainerExport>(configFile);
     const artifactDir = resolveArtifactDirFromFile(configFile);
@@ -2550,6 +2677,7 @@ program
     publicId?: string;
     baseline?: string;
   }) => {
+    await requireTelemetryGate('preview');
     const commandStartedAt = Date.now();
     const schema = readJsonFile<EventSchema>(schemaFile);
 
@@ -2858,6 +2986,7 @@ program
     force?: boolean;
     yes?: boolean;
   }) => {
+    await requireTelemetryGate('publish');
     const commandStartedAt = Date.now();
     let accountId = opts.accountId;
     let containerId = opts.containerId;
@@ -3625,12 +3754,14 @@ program
   .option('--baseline-schema <file>', 'Baseline event-schema.json to compare against')
   .option('--sub-mode <subMode>', `Workflow sub-mode: ${WORKFLOW_SUB_MODES.join(', ')}`)
   .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
-  .action((artifactPath: string, opts: {
+  .action(async (artifactPath: string, opts: {
     schemaFile?: string;
     baselineSchema?: string;
     subMode?: string;
     inputScope?: string;
   }) => {
+    await requireTelemetryGate('run-tracking-update');
+    const commandStartedAt = Date.now();
     const artifactDir = resolveArtifactDirFromInput(artifactPath);
     const subMode = parseSubMode(opts.subMode, 'none');
     const inputScope = opts.inputScope?.trim() || undefined;
@@ -3651,6 +3782,10 @@ program
       if (next) {
         console.log(`   Next step: ${next}`);
       }
+      await captureCommandCompleted('run-tracking-update', commandStartedAt, 'success', {
+        mode: workflowState.mode,
+        checkpoint: workflowState.currentCheckpoint,
+      });
       return;
     }
 
@@ -3660,6 +3795,10 @@ program
     if (!baselineFile || !fs.existsSync(baselineFile)) {
       console.log(`\n⚠️  Tracking Update run started, but baseline schema is missing.`);
       console.log('   Provide --baseline-schema <file>, or confirm a previous schema first.');
+      await captureCommandCompleted('run-tracking-update', commandStartedAt, 'success', {
+        mode: workflowState.mode,
+        checkpoint: workflowState.currentCheckpoint,
+      });
       return;
     }
 
@@ -3681,6 +3820,10 @@ program
     console.log(`   Diff report: ${diffFile}`);
     console.log(`   Business summary: ${summaryFile}`);
     console.log(`   Next guidance: ${summarizeDiffForNextStep(diff)}`);
+    await captureCommandCompleted('run-tracking-update', commandStartedAt, 'success', {
+      mode: workflowState.mode,
+      checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || workflowState.currentCheckpoint,
+    });
   });
 
 program
@@ -3688,7 +3831,9 @@ program
   .description('Workflow mode template: start New Setup run and provide guided next step based on current artifacts')
   .option('--output-root <dir>', 'When <artifact-path> is a site URL, derive the artifact directory under this output root')
   .option('--input-scope <scope>', 'Optional free-form input scope note for this run')
-  .action((artifactPath: string, opts: { outputRoot?: string; inputScope?: string }) => {
+  .action(async (artifactPath: string, opts: { outputRoot?: string; inputScope?: string }) => {
+    await requireTelemetryGate('run-new-setup');
+    const commandStartedAt = Date.now();
     const location = resolveNewSetupArtifactLocation(artifactPath, opts.outputRoot);
     const artifactDir = location.artifactDir;
     const inputScope = opts.inputScope?.trim() || undefined;
@@ -3716,6 +3861,10 @@ program
     } else if (workflowState.nextCommand) {
       console.log(`   Recommended next step: ${workflowState.nextCommand}`);
     }
+    await captureCommandCompleted('run-new-setup', commandStartedAt, 'success', {
+      mode: workflowState.mode,
+      checkpoint: workflowState.currentCheckpoint,
+    });
   });
 
 program
@@ -3744,6 +3893,8 @@ program
     skipLiveVerification?: boolean;
     inputScope?: string;
   }) => {
+    await requireTelemetryGate('run-upkeep');
+    const commandStartedAt = Date.now();
     const artifactDir = resolveArtifactDirFromInput(artifactPath);
     const inputScope = opts.inputScope?.trim() || undefined;
     activateModeRun({
@@ -3760,6 +3911,9 @@ program
     if (!baselineFile || !fs.existsSync(baselineFile)) {
       console.log(`\n⚠️  Upkeep run started, but baseline schema is missing.`);
       console.log('   Provide --baseline-schema <file>, or confirm a previous schema first.');
+      await captureCommandCompleted('run-upkeep', commandStartedAt, 'success', {
+        mode: 'upkeep',
+      });
       return;
     }
     const baselineSchema = readJsonFile<EventSchema>(baselineFile);
@@ -3932,6 +4086,10 @@ program
       ['Recommendation', recommendationFile],
       ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
     ]);
+    await captureCommandCompleted('run-upkeep', commandStartedAt, 'success', {
+      mode: 'upkeep',
+      checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || 'verified',
+    });
   });
 
 program
@@ -3960,6 +4118,8 @@ program
     skipLiveVerification?: boolean;
     inputScope?: string;
   }) => {
+    await requireTelemetryGate('run-health-audit');
+    const commandStartedAt = Date.now();
     const artifactDir = resolveArtifactDirFromInput(artifactPath);
     const inputScope = opts.inputScope?.trim() || undefined;
     activateModeRun({
@@ -4074,6 +4234,10 @@ program
         ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
       ]);
       console.log('\nNote: pass --url to force a fresh crawl-first health audit.');
+      await captureCommandCompleted('run-health-audit', commandStartedAt, 'success', {
+        mode: 'tracking_health_audit',
+        checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || 'verified',
+      });
       return;
     }
 
@@ -4247,6 +4411,10 @@ program
       ['Workflow state', path.join(artifactDir, WORKFLOW_STATE_FILE)],
     ]);
     console.log('\nNote: gtm-config.json is not generated in workflow mode tracking_health_audit.');
+    await captureCommandCompleted('run-health-audit', commandStartedAt, 'success', {
+      mode: 'tracking_health_audit',
+      checkpoint: readWorkflowState(artifactDir)?.currentCheckpoint || 'verified',
+    });
   });
 
 program.parseAsync(process.argv).catch(err => {

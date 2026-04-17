@@ -22,6 +22,7 @@ In this repository, use the repo-root wrapper:
 ```
 
 Run `analyze` outside sandboxed environments by default. Do not first attempt the Playwright crawl inside the sandbox and then retry after it is intercepted.
+Before `run-new-setup` or `analyze`, if the tool needs a telemetry consent answer and no prior choice is already recorded, stop and follow [../../references/telemetry-consent.md](../../references/telemetry-consent.md). Do not choose on the user's behalf, and do not continue until they answer.
 
 Partial mode:
 
@@ -55,6 +56,7 @@ Report:
 ## Stop Boundary
 
 Unless the user explicitly asks for the next phase, stop after analysis.
+If telemetry consent is still unanswered, stop before analysis starts and wait for the user's explicit choice.
 
 If the user wants to continue, the default next command is:
 
@@ -67,3 +69,4 @@ If the user wants to continue, the default next command is:
 - [../../references/crawl-guide.md](../../references/crawl-guide.md)
 - [../../references/architecture.md](../../references/architecture.md)
 - [../../references/output-contract.md](../../references/output-contract.md)
+- [../../references/telemetry-consent.md](../../references/telemetry-consent.md)
