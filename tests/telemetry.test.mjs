@@ -32,6 +32,18 @@ test('telemetry payload uses GA4 Measurement Protocol shape', () => {
   assert.equal(payload.events[0].params.engagement_time_msec, 1);
 });
 
+test('startup telemetry event is supported for command invocation tracking', () => {
+  const payload = buildTelemetryPayload('session-123', 'init_skill', {
+    command_name: 'run-new-setup',
+  });
+
+  assert.equal(payload.client_id, 'session-123');
+  assert.equal(payload.events.length, 1);
+  assert.equal(payload.events[0].name, 'init_skill');
+  assert.equal(payload.events[0].params.command_name, 'run-new-setup');
+  assert.equal(payload.events[0].params.surface, 'cli');
+});
+
 test('telemetry sanitizer drops sensitive and unknown fields', () => {
   const params = sanitizeTelemetryParams({
     command_name: 'sync',
@@ -70,11 +82,12 @@ test('telemetry rejects unsupported event names', () => {
 test('telemetry consent message keeps friendly purpose and privacy boundaries', () => {
   const message = getTelemetryConsentMessage();
 
-  assert.match(message, /collect limited anonymous usage data while you use the tool/i);
+  assert.match(message, /richer anonymous diagnostics beyond the minimal startup signal sent when a command begins/i);
   assert.match(message, /only used for product optimization and reliability/i);
-  assert.match(message, /does not include sensitive page content or sensitive business data/i);
+  assert.match(message, /do not include sensitive page content or sensitive business data/i);
   assert.match(message, /If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it/i);
-  assert.match(message, /If you choose no, we save that choice in local config and continue the workflow normally without diagnostics/i);
+  assert.match(message, /If you choose no, we save that choice in local config and continue the workflow without these richer diagnostics/i);
+  assert.match(message, /The minimal startup signal remains enabled either way/i);
   assert.match(message, /do not send full URLs, page paths, query strings, file paths, GTM\/GA IDs, selectors, OAuth data, raw errors, or page content/i);
   assert.match(message, /site hostname and high-level workflow metadata, which may reveal the domain you worked on/i);
   assert.match(message, /You can decline and continue using the tool/i);
@@ -136,7 +149,8 @@ test('telemetry consent gate blocks non-interactive runs when config is missing'
       assert.match(error.message, /Run this command in an interactive terminal and answer the diagnostics consent prompt/);
       assert.match(error.message, /only used for product optimization and reliability/);
       assert.match(error.message, /If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it/);
-      assert.match(error.message, /If you choose no, we save that choice in local config and continue the workflow normally without diagnostics/);
+      assert.match(error.message, /If you choose no, we save that choice in local config and continue the workflow without these richer diagnostics/);
+      assert.match(error.message, /The minimal startup signal remains enabled either way/);
       assert.match(error.message, /site hostname and high-level workflow metadata, which may reveal the domain you worked on/);
       assert.doesNotMatch(error.message, /environment variable|env override|pre-create telemetry\.json/i);
       return true;

@@ -10,9 +10,11 @@ compatibility: >
   provides those capabilities. sync uses Google's interactive OAuth consent
   screen; the resulting user-owned refresh token is stored under the artifact
   directory and read locally by sync, preview, and publish when they call the
-  official GTM API. Optional anonymous telemetry is opt-in, used only to
-  improve the skill experience and workflow quality, and is not used for
-  sensitive actions or sensitive behavior tracking.
+  official GTM API. A minimal anonymous startup signal is sent when the CLI
+  command begins so operators can measure active usage. Richer anonymous
+  diagnostics remain opt-in, are used only to improve the skill experience and
+  workflow quality, and are not used for sensitive actions or sensitive
+  behavior tracking.
 ---
 
 # Analytics Tracking Automation
@@ -67,7 +69,7 @@ Once `site-analysis.json` indicates Shopify, keep discovery and grouping shared,
 - Use `./event-tracking status <artifact-dir-or-file>` whenever the current checkpoint or next step is unclear.
 - Use `./event-tracking runs <output-root>` when the artifact directory is unknown but the output root is known.
 - Prefer high-level entry commands for user-facing flows: `run-new-setup`, `run-tracking-update`, `run-upkeep`, `run-health-audit`.
-- Telemetry consent is a required user-choice checkpoint. If consent is unanswered when any workflow command surfaces the prompt, stop and follow [telemetry-consent.md](references/telemetry-consent.md) as the single-source interaction contract. Never decide `yes`/`no` on the user's behalf, and continue through the interactive prompt so the local config records their choice.
+- Telemetry consent is a required user-choice checkpoint for richer diagnostics. If consent is unanswered when any workflow command surfaces the prompt, stop and follow [telemetry-consent.md](references/telemetry-consent.md) as the single-source interaction contract. Never decide `yes`/`no` on the user's behalf, and continue through the interactive prompt so the local config records their choice.
 - Treat workflow mode metadata as an internal workflow-state layer, not a user-facing command surface.
 - `analyze`, `validate-schema --check-selectors`, `preview`, and `sync` each need outbound HTTP and a real Chromium; `sync` additionally needs a local loopback callback on `127.0.0.1` for Google's OAuth consent redirect. Run them in an environment that permits those capabilities so Playwright and the OAuth callback can complete.
 - Run prompt-driven GTM sync with an interactive TTY from the start unless exact `--account-id`, `--container-id`, and `--workspace-id` values are already confirmed.

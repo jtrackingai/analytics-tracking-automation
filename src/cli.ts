@@ -107,6 +107,7 @@ import {
 } from './reporter/summary-presenter';
 import {
   captureCommandCompleted,
+  captureSkillInit,
   captureTelemetry,
   ensureTelemetryConsentGate,
 } from './telemetry';
@@ -1605,6 +1606,10 @@ program
   .name('event-tracking')
   .description('Automated web event tracking setup with GA4 + GTM')
   .version(getCliVersion());
+
+program.hook('preAction', async (_thisCommand, actionCommand) => {
+  await captureSkillInit(actionCommand.name());
+});
 
 // STEP 1: Analyze website
 program

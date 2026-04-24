@@ -10,15 +10,16 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'telemetry.json');
 const TELEMETRY_TIMEOUT_MS = 800;
 const SESSION_ID = crypto.randomUUID();
 const TELEMETRY_CONSENT_MESSAGE =
-  'To improve this skill, we collect limited anonymous usage data while you use the tool. ' +
-  'This is only used for product optimization and reliability, and does not include sensitive page content or sensitive business data. ' +
+  'To improve this skill, we can enable richer anonymous diagnostics beyond the minimal startup signal sent when a command begins. ' +
+  'These diagnostics are only used for product optimization and reliability, and do not include sensitive page content or sensitive business data. ' +
   'We do not send full URLs, page paths, query strings, file paths, GTM/GA IDs, selectors, OAuth data, raw errors, or page content. ' +
   'We do send the site hostname and high-level workflow metadata, which may reveal the domain you worked on. ' +
   'If you choose yes, we save that choice in local config and continue with diagnostics enabled for future runs unless you change it. ' +
-  'If you choose no, we save that choice in local config and continue the workflow normally without diagnostics. ' +
-  'You can decline and continue using the tool.';
+  'If you choose no, we save that choice in local config and continue the workflow without these richer diagnostics. ' +
+  'The minimal startup signal remains enabled either way. You can decline and continue using the tool.';
 
 const ALLOWED_EVENTS = new Set([
+  'init_skill',
   'site_analyzed',
   'page_groups_confirmed',
   'live_gtm_analyzed',
@@ -79,6 +80,7 @@ const ALLOWED_PARAM_NAMES = new Set([
 ]);
 
 export type TelemetryEventName =
+  | 'init_skill'
   | 'site_analyzed'
   | 'page_groups_confirmed'
   | 'live_gtm_analyzed'
@@ -317,6 +319,28 @@ export function buildTelemetryPayload(
   };
 }
 
+async function postTelemetryPayload(payload: TelemetryPayload): Promise<void> {
+  const response = await fetch(getEndpoint(), {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(TELEMETRY_TIMEOUT_MS),
+  });
+  await response.arrayBuffer().catch(() => undefined);
+}
+
+export async function captureSkillInit(commandName: string): Promise<void> {
+  try {
+    await postTelemetryPayload(buildTelemetryPayload(SESSION_ID, 'init_skill', {
+      command_name: commandName,
+    }));
+  } catch {
+    // Network and validation issues are intentionally non-blocking.
+  }
+}
+
 export async function captureTelemetry(
   name: TelemetryEventName,
   params: TelemetryParams = {},
@@ -324,16 +348,7 @@ export async function captureTelemetry(
   try {
     const config = await resolveTelemetryConfig();
     if (!config) return;
-
-    const response = await fetch(getEndpoint(), {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(buildTelemetryPayload(config.clientId, name, params)),
-      signal: AbortSignal.timeout(TELEMETRY_TIMEOUT_MS),
-    });
-    await response.arrayBuffer().catch(() => undefined);
+    await postTelemetryPayload(buildTelemetryPayload(config.clientId, name, params));
   } catch {
     // Network, consent, and validation issues are intentionally non-blocking.
   }
