@@ -47,10 +47,141 @@ export interface SchemaContext {
   dataLayerEvents: DataLayerEvent[];
   existingTrackingBaseline?: ExistingTrackingBaseline;
   groups: GroupSummary[];
+  reusableInteractions: ReusableInteractionSummary[];
+}
+
+export interface ReusableInteractionSummary {
+  key: string;
+  type: InteractiveElement['type'];
+  urls: string[];
+  urlCount: number;
+  groupNames: string[];
+  groupCount: number;
+  selectors: string[];
+  hrefs: string[];
+  textSamples: string[];
+  ariaLabels: string[];
+  occurrences: number;
 }
 
 function elementKey(el: InteractiveElement): string {
   return `${el.type}|${el.selector}|${el.text || ''}|${el.parentSection || ''}`;
+}
+
+function normalizeWhitespace(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed.replace(/\s+/g, ' ') : undefined;
+}
+
+function canonicalizeHref(href: string | undefined, rootUrl: string): string | undefined {
+  const trimmed = normalizeWhitespace(href);
+  if (!trimmed) return undefined;
+
+  try {
+    const parsed = new URL(trimmed, rootUrl);
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
+}
+
+function interactionKey(el: InteractiveElement, rootUrl: string): string | undefined {
+  const href = canonicalizeHref(el.href, rootUrl);
+  if (href) return `href|${el.type}|${href}`;
+
+  const selector = normalizeWhitespace(el.selector);
+  if (selector) return `selector|${el.type}|${selector}`;
+
+  return undefined;
+}
+
+function buildReusableInteractions(analysis: SiteAnalysis): ReusableInteractionSummary[] {
+  const groupNamesByUrl = new Map<string, Set<string>>();
+  for (const group of analysis.pageGroups) {
+    for (const url of group.urls) {
+      const names = groupNamesByUrl.get(url) || new Set<string>();
+      names.add(group.name);
+      groupNamesByUrl.set(url, names);
+    }
+  }
+
+  const summaryByKey = new Map<string, {
+    type: InteractiveElement['type'];
+    urls: Set<string>;
+    groupNames: Set<string>;
+    selectors: Set<string>;
+    hrefs: Set<string>;
+    textSamples: Set<string>;
+    ariaLabels: Set<string>;
+    occurrences: number;
+  }>();
+
+  for (const page of analysis.pages) {
+    const pageGroupNames = groupNamesByUrl.get(page.url) || new Set<string>();
+
+    for (const el of page.elements) {
+      if (!el.isVisible) continue;
+      if (el.type !== 'link' && el.type !== 'button') continue;
+
+      const key = interactionKey(el, analysis.rootUrl);
+      if (!key) continue;
+
+      const summary = summaryByKey.get(key) || {
+        type: el.type,
+        urls: new Set<string>(),
+        groupNames: new Set<string>(),
+        selectors: new Set<string>(),
+        hrefs: new Set<string>(),
+        textSamples: new Set<string>(),
+        ariaLabels: new Set<string>(),
+        occurrences: 0,
+      };
+
+      summary.urls.add(page.url);
+      for (const groupName of pageGroupNames) summary.groupNames.add(groupName);
+
+      const selector = normalizeWhitespace(el.selector);
+      if (selector) summary.selectors.add(selector);
+
+      const href = canonicalizeHref(el.href, analysis.rootUrl);
+      if (href) summary.hrefs.add(href);
+
+      const text = normalizeWhitespace(el.text);
+      if (text) summary.textSamples.add(text);
+
+      const ariaLabel = normalizeWhitespace(el.ariaLabel);
+      if (ariaLabel) summary.ariaLabels.add(ariaLabel);
+
+      summary.occurrences += 1;
+      summaryByKey.set(key, summary);
+    }
+  }
+
+  return Array.from(summaryByKey.entries())
+    .map(([key, summary]) => ({
+      key,
+      type: summary.type,
+      urls: Array.from(summary.urls).sort(),
+      urlCount: summary.urls.size,
+      groupNames: Array.from(summary.groupNames).sort(),
+      groupCount: summary.groupNames.size,
+      selectors: Array.from(summary.selectors).sort(),
+      hrefs: Array.from(summary.hrefs).sort(),
+      textSamples: Array.from(summary.textSamples).sort(),
+      ariaLabels: Array.from(summary.ariaLabels).sort(),
+      occurrences: summary.occurrences,
+    }))
+    .filter(item => item.urlCount >= 2)
+    .sort((left, right) => {
+      if (right.groupCount !== left.groupCount) {
+        return right.groupCount - left.groupCount;
+      }
+      if (right.urlCount !== left.urlCount) {
+        return right.urlCount - left.urlCount;
+      }
+      return right.occurrences - left.occurrences;
+    });
 }
 
 function pickRepresentativeHtml(group: PageGroup, groupPages: PageAnalysis[]): string | undefined {
@@ -146,5 +277,6 @@ export function buildSchemaContext(analysis: SiteAnalysis, liveAnalysis?: LiveGt
     dataLayerEvents: analysis.dataLayerEvents || [],
     existingTrackingBaseline: liveAnalysis ? buildExistingTrackingBaseline(liveAnalysis) : undefined,
     groups: analysis.pageGroups.map(g => summarizeGroup(g, analysis.pages)),
+    reusableInteractions: buildReusableInteractions(analysis),
   };
 }

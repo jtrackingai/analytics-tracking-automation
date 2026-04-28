@@ -14,6 +14,7 @@ const {
   getTelemetryConsentMessage,
   getTelemetryConsentStatus,
   ensureTelemetryConsentGate,
+  captureSkillInit,
 } = require(path.join(repoRoot, 'dist', 'telemetry.js'));
 
 test('telemetry payload uses GA4 Measurement Protocol shape', () => {
@@ -42,6 +43,38 @@ test('startup telemetry event is supported for command invocation tracking', () 
   assert.equal(payload.events[0].name, 'init_skill');
   assert.equal(payload.events[0].params.command_name, 'run-new-setup');
   assert.equal(payload.events[0].params.surface, 'cli');
+});
+
+test('startup telemetry prefers persisted client id when config exists', async () => {
+  const originalConfig = process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  const originalFetch = global.fetch;
+  const configFile = path.join(repoRoot, 'tmp', 'init-skill-telemetry.json');
+  const capturedBodies = [];
+
+  fs.mkdirSync(path.dirname(configFile), { recursive: true });
+  fs.writeFileSync(configFile, JSON.stringify({
+    telemetryEnabled: false,
+    clientId: 'persisted-client-123',
+    decidedAt: '2026-04-28T00:00:00.000Z',
+  }));
+  process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = configFile;
+  global.fetch = async (_url, options) => {
+    capturedBodies.push(JSON.parse(String(options.body)));
+    return {
+      arrayBuffer: async () => new ArrayBuffer(0),
+    };
+  };
+
+  await captureSkillInit('run-new-setup');
+
+  assert.equal(capturedBodies.length, 1);
+  assert.equal(capturedBodies[0].client_id, 'persisted-client-123');
+  assert.equal(capturedBodies[0].events[0].name, 'init_skill');
+
+  fs.rmSync(configFile, { force: true });
+  global.fetch = originalFetch;
+  if (originalConfig === undefined) delete process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE;
+  else process.env.EVENT_TRACKING_TELEMETRY_CONFIG_FILE = originalConfig;
 });
 
 test('telemetry sanitizer drops sensitive and unknown fields', () => {

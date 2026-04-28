@@ -20,6 +20,7 @@ import { GTMClient, GTMAccount, GTMContainer, GTMWorkspace } from './gtm/client'
 import { syncConfigToWorkspace, dryRunSync } from './gtm/sync';
 import { validateEventSchema, getQuotaSummary } from './generator/schema-validator';
 import { buildSchemaContext } from './generator/schema-context';
+import { buildHealthAuditRecommendedSchema } from './generator/health-audit-schema';
 import { buildExistingTrackingBaseline, compareSchemaToLiveTracking } from './generator/live-tracking-insights';
 import { checkSelectors } from './generator/selector-check';
 import {
@@ -554,145 +555,6 @@ function ensurePageGroupsForHealthAudit(analysis: SiteAnalysis): SiteAnalysis {
     };
   }
   return analysis;
-}
-
-function slugForEvent(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 40);
-}
-
-function inferPageRegex(url: string): string {
-  try {
-    const pathname = new URL(url).pathname || '/';
-    if (pathname === '/') return '^/$';
-    return `^${pathname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/?$`;
-  } catch {
-    return '^/$';
-  }
-}
-
-function isHighValuePath(url: string): boolean {
-  return /(pricing|plan|product|checkout|cart|contact|demo|signup|register|trial)/i.test(url);
-}
-
-function buildHealthAuditRecommendedSchema(args: {
-  analysis: SiteAnalysis;
-  liveAnalysis: LiveGtmAnalysis;
-}): EventSchema {
-  const liveBaseline = buildExistingTrackingBaseline(args.liveAnalysis);
-  const events: EventSchema['events'] = [];
-  const usedNames = new Set<string>();
-
-  const pushEvent = (event: EventSchema['events'][number]) => {
-    if (!event.eventName || usedNames.has(event.eventName)) return;
-    usedNames.add(event.eventName);
-    events.push(event);
-  };
-
-  for (const liveEvent of liveBaseline.events) {
-    const triggerType = (liveEvent.triggerTypes.find(type => type !== 'unknown') || 'custom') as EventSchema['events'][number]['triggerType'];
-    pushEvent({
-      eventName: liveEvent.eventName,
-      description: `Carry forward live event ${liveEvent.eventName} from current GTM baseline.`,
-      triggerType,
-      elementSelector: liveEvent.selectors[0] || undefined,
-      pageUrlPattern: liveEvent.urlPatterns[0] || undefined,
-      parameters: uniq(liveEvent.parameterNames).slice(0, 8).map(name => ({
-        name,
-        value:
-          name === 'page_location'
-            ? '{{Page URL}}'
-            : name === 'page_title'
-              ? '{{Page Title}}'
-              : name === 'page_referrer'
-                ? '{{Referrer}}'
-                : `{{${name}}}`,
-        description: `Parameter ${name} from live baseline alignment.`,
-      })),
-      priority: /(purchase|checkout|signup|sign_up|lead|contact)/.test(liveEvent.eventName) ? 'high' : 'medium',
-    });
-  }
-
-  const ctaKeywords: Array<{ keyword: RegExp; eventName: string; priority: 'high' | 'medium' }> = [
-    { keyword: /(sign up|signup|register|create account)/i, eventName: 'sign_up_click', priority: 'high' },
-    { keyword: /(contact|get in touch|talk to sales|咨询)/i, eventName: 'contact_click', priority: 'high' },
-    { keyword: /(book demo|request demo|schedule demo)/i, eventName: 'demo_request_click', priority: 'high' },
-    { keyword: /(start trial|free trial|try for free)/i, eventName: 'start_trial_click', priority: 'high' },
-    { keyword: /(pricing|see plans|view pricing)/i, eventName: 'pricing_click', priority: 'medium' },
-    { keyword: /(buy now|checkout|add to cart|purchase)/i, eventName: 'begin_checkout_click', priority: 'high' },
-  ];
-
-  for (const page of args.analysis.pages.slice(0, 25)) {
-    const pageRegex = inferPageRegex(page.url);
-    for (const element of page.elements.slice(0, 120)) {
-      if (!element.isVisible) continue;
-      if (element.type !== 'button' && element.type !== 'link') continue;
-      const label = (element.text || element.ariaLabel || '').trim();
-      if (!label) continue;
-
-      const matchedKeyword = ctaKeywords.find(item => item.keyword.test(label));
-      const eventName = matchedKeyword?.eventName || `cta_click_${slugForEvent(label)}`;
-      const priority = matchedKeyword?.priority || (isHighValuePath(page.url) ? 'high' : 'medium');
-      pushEvent({
-        eventName,
-        description: `Tracks CTA interaction "${label}" on ${page.url}.`,
-        triggerType: 'click',
-        elementSelector: element.selector || undefined,
-        pageUrlPattern: pageRegex,
-        parameters: [
-          { name: 'page_location', value: '{{Page URL}}', description: 'Current page URL' },
-          { name: 'page_title', value: '{{Page Title}}', description: 'Current page title' },
-          { name: 'link_text', value: '{{Click Text}}', description: 'Clicked CTA text' },
-          { name: 'link_url', value: '{{Click URL}}', description: 'Clicked CTA URL' },
-        ],
-        priority,
-      });
-      if (events.length >= 40) break;
-    }
-    if (events.length >= 40) break;
-  }
-
-  const highValueUrls = uniq([args.analysis.rootUrl, ...args.analysis.discoveredUrls]).filter(isHighValuePath).slice(0, 12);
-  for (const url of highValueUrls) {
-    const lower = url.toLowerCase();
-    const eventName = lower.includes('pricing')
-      ? 'view_pricing_page'
-      : lower.includes('product')
-        ? 'view_product_page'
-        : lower.includes('checkout')
-          ? 'view_checkout_page'
-          : lower.includes('cart')
-            ? 'view_cart_page'
-            : lower.includes('contact')
-              ? 'view_contact_page'
-              : `view_page_${slugForEvent(url)}`;
-    pushEvent({
-      eventName,
-      description: `Tracks page view coverage for high-value page ${url}.`,
-      triggerType: 'page_view',
-      pageUrlPattern: inferPageRegex(url),
-      parameters: [
-        { name: 'page_location', value: '{{Page URL}}', description: 'Current page URL' },
-        { name: 'page_title', value: '{{Page Title}}', description: 'Current page title' },
-        { name: 'page_referrer', value: '{{Referrer}}', description: 'Referrer page URL' },
-      ],
-      priority: 'high',
-    });
-  }
-
-  return {
-    siteUrl: args.analysis.rootUrl,
-    generatedAt: new Date().toISOString(),
-    artifactSource: {
-      mode: 'health_audit_recommendation',
-      reason: 'Tracking Health Audit generated a candidate schema from current crawl signals plus the live GTM baseline.',
-      derivedFrom: ['site-analysis.json', 'live-gtm-analysis.json'],
-    },
-    events: events.slice(0, 60),
-  };
 }
 
 function buildRunsModeSummary(entries: Array<{
@@ -2282,6 +2144,7 @@ program
     console.log(`\n✅ Schema context generated:`);
     console.log(`   Groups: ${context.groups.length}`);
     console.log(`   Total unique elements: ${context.groups.reduce((s, g) => s + g.elements.length, 0)}`);
+    console.log(`   Reusable interactions across pages: ${context.reusableInteractions.length}`);
     console.log(`   Size: ${(origSize / 1024).toFixed(0)}KB → ${(compSize / 1024).toFixed(0)}KB (${ratio}% reduction)`);
     console.log(`   Output: ${outFile}`);
     if (shopifyTemplateFile) {

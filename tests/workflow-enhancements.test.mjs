@@ -44,6 +44,9 @@ const {
   LIVE_PREVIEW_RESULT_FILE,
   LIVE_TRACKING_HEALTH_FILE,
 } = require(path.join(repoRoot, 'dist', 'gtm', 'live-verifier.js'));
+const {
+  buildHealthAuditRecommendedSchema,
+} = require(path.join(repoRoot, 'dist', 'generator', 'health-audit-schema.js'));
 const { getTelemetryConsentMessage } = require(path.join(repoRoot, 'dist', 'telemetry.js'));
 
 function makeTempDir() {
@@ -598,6 +601,88 @@ test('health-audit schema generator can recommend form_submit events from analyz
   assert.match(context.groups[0].representativeHtml, /login-form/);
 });
 
+test('build-schema-context exposes reusable interactions across groups and urls', () => {
+  const analysis = makeConfirmedSiteAnalysis();
+  analysis.pages = [
+    {
+      url: 'https://example.com/',
+      title: 'Home',
+      description: 'Homepage',
+      elements: [
+        { type: 'link', selector: 'a.book-demo', text: 'Book a demo', href: '/demo', dataAttributes: {}, isVisible: true },
+        { type: 'button', selector: 'button.hero-cta', text: 'Try for free', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['home'],
+      cleanedHtml: '<main><a class="book-demo" href="/demo">Book a demo</a></main>',
+    },
+    {
+      url: 'https://example.com/pricing',
+      title: 'Pricing',
+      description: 'Pricing page',
+      elements: [
+        { type: 'link', selector: 'a.pricing-demo-link', text: 'Book a demo', href: 'https://example.com/demo', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['pricing'],
+      cleanedHtml: '<main><a class="pricing-demo-link" href="/demo">Book a demo</a></main>',
+    },
+    {
+      url: 'https://example.com/solutions',
+      title: 'Solutions',
+      description: 'Solutions page',
+      elements: [
+        { type: 'link', selector: 'a.solution-demo-link', text: 'Book a demo', href: '/demo#top', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['solutions'],
+      cleanedHtml: '<main><a class="solution-demo-link" href="/demo#top">Book a demo</a></main>',
+    },
+  ];
+  analysis.pageGroups = [
+    {
+      name: 'homepage',
+      displayName: 'Homepage',
+      description: 'Homepage group',
+      contentType: 'marketing',
+      urls: ['https://example.com/'],
+      urlPattern: '^/$',
+      representativeHtml: '',
+    },
+    {
+      name: 'commercial_pages',
+      displayName: 'Commercial Pages',
+      description: 'Commercial group',
+      contentType: 'marketing',
+      urls: ['https://example.com/pricing', 'https://example.com/solutions'],
+      urlPattern: '^/(pricing|solutions)$',
+      representativeHtml: '',
+    },
+  ];
+
+  const context = buildSchemaContext(analysis);
+  const reusable = context.reusableInteractions.find(item => item.key === 'href|link|https://example.com/demo');
+
+  assert.ok(reusable, 'Book demo CTA should be summarized as a reusable interaction');
+  assert.equal(reusable.urlCount, 3);
+  assert.equal(reusable.groupCount, 2);
+  assert.deepEqual(reusable.groupNames, ['commercial_pages', 'homepage']);
+  assert.deepEqual(reusable.textSamples, ['Book a demo']);
+  assert.deepEqual(
+    reusable.selectors,
+    ['a.book-demo', 'a.pricing-demo-link', 'a.solution-demo-link'],
+  );
+});
+
 test('status defaults to primary artifacts and expands internal metadata only in verbose mode', t => {
   const artifactDir = makeTempDir();
   t.after(() => fs.rmSync(artifactDir, { recursive: true, force: true }));
@@ -1049,6 +1134,93 @@ test('buildLiveVerificationSchema keeps automation-friendly live events and skip
   assert.deepEqual(build.includedEvents, ['signup_click']);
   assert.equal(build.schema.events[0].triggerType, 'click');
   assert.equal(build.skippedEvents[0].eventName, 'opaque_custom_event');
+});
+
+test('buildHealthAuditRecommendedSchema prefers cross-page CTA events for reusable interactions', () => {
+  const analysis = makeConfirmedSiteAnalysis();
+  analysis.rootUrl = 'https://example.com';
+  analysis.discoveredUrls = [
+    'https://example.com/',
+    'https://example.com/pricing',
+    'https://example.com/solutions',
+  ];
+  analysis.pages = [
+    {
+      url: 'https://example.com/',
+      title: 'Home',
+      description: 'Homepage',
+      elements: [
+        { type: 'link', selector: 'a.book-demo-home', text: 'Book demo', href: '/demo', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['home'],
+      cleanedHtml: '<main><a class="book-demo-home" href="/demo">Book demo</a></main>',
+    },
+    {
+      url: 'https://example.com/pricing',
+      title: 'Pricing',
+      description: 'Pricing',
+      elements: [
+        { type: 'link', selector: 'a.book-demo-pricing', text: 'Book demo', href: '/demo', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['pricing'],
+      cleanedHtml: '<main><a class="book-demo-pricing" href="/demo">Book demo</a></main>',
+    },
+    {
+      url: 'https://example.com/solutions',
+      title: 'Solutions',
+      description: 'Solutions',
+      elements: [
+        { type: 'link', selector: 'a.book-demo-solutions', text: 'Book demo', href: '/demo', dataAttributes: {}, isVisible: true },
+      ],
+      hasSearchForm: false,
+      hasVideoPlayer: false,
+      hasInfiniteScroll: false,
+      isSPA: false,
+      sectionClasses: ['solutions'],
+      cleanedHtml: '<main><a class="book-demo-solutions" href="/demo">Book demo</a></main>',
+    },
+  ];
+  analysis.pageGroups = [
+    {
+      name: 'homepage',
+      displayName: 'Homepage',
+      description: 'Homepage',
+      contentType: 'marketing',
+      urls: ['https://example.com/'],
+      urlPattern: '^/$',
+      representativeHtml: '',
+    },
+    {
+      name: 'commercial_pages',
+      displayName: 'Commercial Pages',
+      description: 'Commercial pages',
+      contentType: 'marketing',
+      urls: ['https://example.com/pricing', 'https://example.com/solutions'],
+      urlPattern: '^/(pricing|solutions)$',
+      representativeHtml: '',
+    },
+  ];
+
+  const generatedSchema = buildHealthAuditRecommendedSchema({
+    analysis,
+    liveAnalysis: makeLiveGtmAnalysis({
+    aggregatedEvents: [],
+    containers: [],
+    detectedContainerIds: [],
+    }),
+  });
+  const event = generatedSchema.events.find(item => item.eventName === 'demo_request_click');
+  assert.ok(event, 'cross-page demo CTA should be promoted into a recommended event');
+  assert.equal(event.pageUrlPattern, undefined);
+  assert.equal(event.elementSelector, 'a.book-demo-home');
 });
 
 test('tracking_health_audit mode blocks generate-gtm unless force is used', t => {

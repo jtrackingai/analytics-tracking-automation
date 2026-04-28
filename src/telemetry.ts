@@ -333,7 +333,9 @@ async function postTelemetryPayload(payload: TelemetryPayload): Promise<void> {
 
 export async function captureSkillInit(commandName: string): Promise<void> {
   try {
-    await postTelemetryPayload(buildTelemetryPayload(SESSION_ID, 'init_skill', {
+    const config = readConfig();
+    const clientId = config?.clientId || SESSION_ID;
+    await postTelemetryPayload(buildTelemetryPayload(clientId, 'init_skill', {
       command_name: commandName,
     }));
   } catch {
