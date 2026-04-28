@@ -288,6 +288,8 @@ export const __testOnly = {
   buildPreviewClickTargets,
   selectorLooksLikeForm,
   waitForHitCount,
+  eventAppliesToPage,
+  normalizeComparableUrl,
 };
 
 function getManagedPreviewEvents(schema: EventSchema): GA4Event[] {
@@ -395,7 +397,7 @@ function eventAppliesToPage(event: GA4Event, pageUrl: string, rootUrl: string): 
     }
   }
 
-  return pageUrl === rootUrl;
+  return normalizeComparableUrl(pageUrl) === normalizeComparableUrl(rootUrl);
 }
 
 function normalizeComparableUrl(url: string): string {
@@ -626,6 +628,27 @@ async function clickVisibleMatchAt(
     const clickedViaPreviewSafeLink = await candidate.evaluate((el) => {
       const linkTarget = el.closest('a[href], area[href]') as HTMLElement | null;
       if (!linkTarget) return false;
+
+      const href = linkTarget.getAttribute('href') || '';
+      const rawTarget = (linkTarget.getAttribute('target') || '').trim().toLowerCase();
+      const opensNewWindow = rawTarget === '_blank';
+      let shouldKeepNavigation = false;
+
+      try {
+        const resolvedUrl = new URL((linkTarget as HTMLAnchorElement).href, window.location.href);
+        const sameOrigin = resolvedUrl.origin === window.location.origin;
+        const httpProtocol = resolvedUrl.protocol === 'http:' || resolvedUrl.protocol === 'https:';
+        shouldKeepNavigation = sameOrigin && httpProtocol && !opensNewWindow;
+      } catch {
+        shouldKeepNavigation = href.startsWith('/') && !opensNewWindow;
+      }
+
+      // Let same-origin same-tab links navigate normally. Many SPA sites only
+      // complete tracking after router/history updates, so preventing default
+      // here can create preview false negatives.
+      if (shouldKeepNavigation) {
+        return false;
+      }
 
       const rect = linkTarget.getBoundingClientRect();
       const style = window.getComputedStyle(linkTarget);

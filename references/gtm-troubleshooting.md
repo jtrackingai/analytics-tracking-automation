@@ -37,6 +37,14 @@
 - Confirm the GA4 Measurement ID (`G-XXXXXXXXXX`) in `gtm-config.json` is correct.
 - If `eventTrackingMetadata.googleTagId` is present and differs from the measurement ID, remember that the configuration tag targets `configTagTargetId`, while GA4 event tags still use `ga4MeasurementId`.
 
+Before declaring a click event to be a GTM configuration failure, rule out preview false negatives:
+
+- same-origin SPA links may fire the business event only after router or history changes
+- root URLs with and without a trailing slash should be treated as the same page during preview analysis
+- external links, `_blank` links, and `mailto:` links may still require preview-safe handling to avoid losing browser context
+
+Preview `no hit` is therefore **not automatically equivalent** to "broken GTM config". For navigation-heavy sites, first confirm whether the event fires in manual GTM preview / Tag Assistant before rewriting triggers.
+
 ## Shopify Sites
 
 - Shopify sites do not use the normal automated preview path in this skill.
@@ -49,6 +57,16 @@
 - Use browser DevTools → inspect the element → right-click → Copy selector.
 - Update the `elementSelector` field in `event-schema.json`.
 - Re-run `generate-gtm` then `sync` to push the corrected trigger.
+
+Do not approve selectors that only work because of crawler-only `:contains("...")` syntax. GTM does not execute `:contains()` in CSS selector triggers.
+
+If the schema still contains selectors like:
+
+- `a:contains("Pricing")`
+- `button:contains("Get Started")`
+- `a.group.flex:contains("Introduction")`
+
+then treat them as unresolved discovery hints, not production-ready selectors. Replace them with `id`, stable `href`, `data-*`, `aria-*`, or another structural selector before shipping.
 
 ## Duplicate Tags After Re-sync
 

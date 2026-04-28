@@ -28,6 +28,12 @@ Use this as a generic English template when turning raw preview output into a st
 - `<event_name>` — Why it matters: `<business impact or funnel role>`. Current issue: `<...>`. Recommended action: `<...>`.
 - `<event_name>` — Current issue: `<...>`. Recommended action: `<...>`.
 
+Interpretation rule:
+
+- Do not automatically translate every automated preview `no hit` into "broken GTM config".
+- SPA navigation, same-origin route changes, login redirects, and preview-safe click handling can all create false negatives.
+- If manual GTM preview or Tag Assistant proves the event fires, document that as a preview-attribution limitation rather than a tracking failure.
+
 ### If The Reader Only Looks At The Summary
 
 - If the unresolved high-priority events still represent real live conversion entry points, treat them as release blockers and re-run Preview after fixing them.
@@ -66,6 +72,12 @@ Repeat the following subsection for each page group. Keep the structure consiste
 - `<Short conclusion about what passed>`
 - `<Short conclusion about what failed or still needs confirmation>`
 - `<Short delivery or release implication>`
+
+When explaining a failure, classify it explicitly as one of:
+
+- `selector problem`: the intended element was not found, was too broad, or was ambiguous
+- `runtime problem`: the interaction happened but the GTM / GA4 event truly did not fire
+- `preview limitation`: the event fires in manual preview, but automated preview did not attribute it correctly
 
 | Event Name | Event Description | Trigger Type | Parameters | Pages | Status | Priority | Failure Reason |
 |---|---|---|---|---|---|---|---|

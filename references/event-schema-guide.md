@@ -128,9 +128,50 @@ For Shopify custom events, prefer `dataLayer` variables pushed by the custom pix
 
 ## Selector Format
 
-Use standard CSS selectors in `elementSelector`. The crawler may produce `:contains("text")` pseudo-selectors — these are **not supported by GTM**. The `generate-gtm` command automatically strips `:contains()` and converts to **Click Text matching**. This may fail if text is dynamically rendered or has extra whitespace. Prefer `data-testid`, `id`, or `class`-based selectors when available.
+Use standard CSS selectors in `elementSelector`.
 
-Selectors generated with `:contains()` are automatically converted into Click Text matching, but that can be unreliable when text is dynamically rendered. Prefer `data-testid`, `id`, or `class` selectors when available.
+The crawler may produce `:contains("text")` pseudo-selectors as a discovery aid, but `:contains()` is **not supported by GTM CSS selector triggers** and must **not** be treated as a production-safe final selector.
+
+Treat `:contains()` as a hint only:
+
+- use it to discover the candidate CTA or form control in crawl artifacts
+- then replace it with a stable executable selector before schema approval
+- prefer `id`, stable `href`, `data-*`, `aria-*`, or stable structural selectors
+
+Do **not** rely on `generate-gtm` to "fix" `:contains()` later. If the only thing holding a selector together is text, the generated GTM trigger will often degrade into an over-broad selector such as bare `a`, bare `button`, or a generic class pattern. That creates false positives, duplicate firing, or click events that are impossible to QA reliably.
+
+Hard rule for final schema approval:
+
+- if removing `:contains()` would broaden the selector into a generic tag or weak class match, do **not** approve that selector as-is
+- either replace it with a stable structural selector
+- or mark the event for manual selector resolution instead of shipping a fragile click trigger
+
+Example anti-patterns:
+
+- `a:contains("Pricing")` → degrades to `a`
+- `button:contains("Get Started")` → degrades to `button`
+- `a.group.flex:contains("Introduction")` → degrades to a generic layout class anchor
+
+These patterns may still be useful during discovery, but they are not acceptable as final GTM execution selectors unless they are rewritten into stable structure-based selectors.
+
+### Text Signals vs Executable Selectors
+
+Keep these concepts separate during schema design:
+
+- **text signal**: helps identify the intended CTA during analysis
+- **executable selector**: the final GTM-safe selector that will actually trigger the event
+
+Text can still be captured as an event parameter such as `link_text`, but text should not be the thing that makes the trigger executable.
+
+### Baseline Event Carry-Forward
+
+When reusing events from an existing live GTM baseline:
+
+- keep baseline click events as click events when their structural trigger can be recovered
+- keep baseline custom events only when the event source still exists and is understood
+- do **not** carry forward a custom event name as a standalone schema event if the underlying source (`dataLayer.push`, listener, app callback, etc.) cannot be restored or verified
+
+If a baseline custom event's source cannot be recovered, mark it as an unresolved dependency rather than presenting it as a fully implemented event.
 
 ## Output Format
 

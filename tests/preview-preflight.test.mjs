@@ -292,3 +292,34 @@ test('preview source prevents default navigation for link targets before synthet
     'Preview-safe link clicks should prevent real navigation while still dispatching click events.',
   );
 });
+
+test('preview source allows same-origin same-tab links to navigate normally', async () => {
+  const previewSource = fs.readFileSync(path.join(repoRoot, 'src', 'gtm', 'preview.ts'), 'utf8');
+
+  assert.match(
+    previewSource,
+    /shouldKeepNavigation = sameOrigin && httpProtocol && !opensNewWindow;/,
+    'Preview should preserve navigation for same-origin same-tab links.',
+  );
+  assert.match(
+    previewSource,
+    /if \(shouldKeepNavigation\) \{\s+return false;\s+\}/,
+    'Preview should skip preview-safe preventDefault mode when a same-origin link should navigate normally.',
+  );
+});
+
+test('preview root-page matching normalizes trailing slashes', async () => {
+  const preview = loadPreviewModule();
+
+  const event = {
+    eventName: 'pricing_navigation_click',
+    triggerType: 'click',
+    elementSelector: '#header-link-pricing',
+  };
+
+  assert.equal(
+    preview.__testOnly.eventAppliesToPage(event, 'https://novita.ai/', 'https://novita.ai'),
+    true,
+    'Preview should treat root URLs with and without a trailing slash as the same page.',
+  );
+});
