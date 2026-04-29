@@ -196,6 +196,10 @@ const PREVIEW_CLICK_RETRY_WAIT_MS = 7000;
 const PREVIEW_SUBMIT_WAIT_MS = 6000;
 const PREVIEW_CUSTOM_CLICK_WAIT_MS = 6000;
 
+interface PreviewClickOptions {
+  guardNavigation?: boolean;
+}
+
 function splitSelectorList(selector: string): string[] {
   return selector.split(',').map(part => part.trim()).filter(Boolean);
 }
@@ -624,6 +628,7 @@ async function clickVisibleMatchAt(
   selector: string,
   candidateIndex: number,
   textMatches: string[] = [],
+  options: PreviewClickOptions = {},
 ): Promise<boolean> {
   const locator = page.locator(selector);
   const count = await locator.count().catch(() => 0);
@@ -642,6 +647,38 @@ async function clickVisibleMatchAt(
   if (candidateIndex < 0 || candidateIndex >= candidateIndexes.length) return false;
   const candidate = locator.nth(candidateIndexes[candidateIndex]);
   const isVisible = await candidate.isVisible({ timeout: 2000 }).catch(() => false);
+  const installNavigationGuard = async () => {
+    if (!options.guardNavigation) return false;
+
+    return candidate.evaluate((el) => {
+      const target = (el.closest('a, button, input, label, summary, [role="button"]') || el) as HTMLElement | null;
+      if (!target) return false;
+
+      let removed = false;
+      const removeGuard = () => {
+        if (removed) return;
+        removed = true;
+        document.removeEventListener('click', guard, true);
+      };
+      const guard = (evt: Event) => {
+        const eventTarget = evt.target instanceof Element ? evt.target : null;
+        if (!eventTarget || (eventTarget !== target && !target.contains(eventTarget))) return;
+
+        // This listener is installed after GTM is loaded. GTM's capture listener
+        // sees the click first; this stops app handlers from navigating away
+        // before GA4 can send the preview hit.
+        evt.preventDefault();
+        if (typeof evt.stopImmediatePropagation === 'function') evt.stopImmediatePropagation();
+        else evt.stopPropagation();
+        removeGuard();
+      };
+
+      document.addEventListener('click', guard, true);
+      window.setTimeout(removeGuard, 2000);
+      return true;
+    }).catch(() => false);
+  };
+
   if (isVisible) {
     const clickedViaPreviewSafeLink = await candidate.evaluate((el) => {
       const linkTarget = el.closest('a[href], area[href]') as HTMLElement | null;
@@ -703,11 +740,13 @@ async function clickVisibleMatchAt(
 
     try {
       await candidate.scrollIntoViewIfNeeded().catch(() => {});
+      await installNavigationGuard();
       await candidate.click({ timeout: 2000, force: false, noWaitAfter: true });
       return true;
     } catch {
       try {
         await candidate.scrollIntoViewIfNeeded().catch(() => {});
+        await installNavigationGuard();
         await candidate.click({ timeout: 2000, force: true, noWaitAfter: true });
         return true;
       } catch {
@@ -715,6 +754,7 @@ async function clickVisibleMatchAt(
           await candidate.scrollIntoViewIfNeeded().catch(() => {});
           const box = await candidate.boundingBox();
           if (box && box.width > 0 && box.height > 0) {
+            await installNavigationGuard();
             await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
             await page.mouse.down();
             await page.mouse.up();
@@ -727,7 +767,7 @@ async function clickVisibleMatchAt(
     }
   }
 
-  const clickedViaFallback = await candidate.evaluate((el) => {
+  const clickedViaFallback = await candidate.evaluate((el, args: PreviewClickOptions) => {
     const target = (el.closest('a, button, input, label, summary, [role="button"]') || el) as HTMLElement | null;
     if (!target) return false;
 
@@ -739,6 +779,24 @@ async function clickVisibleMatchAt(
 
     target.scrollIntoView({ block: 'center', inline: 'center' });
     target.focus?.();
+    if (args.guardNavigation) {
+      let removed = false;
+      const removeGuard = () => {
+        if (removed) return;
+        removed = true;
+        document.removeEventListener('click', guard, true);
+      };
+      const guard = (evt: Event) => {
+        const eventTarget = evt.target instanceof Element ? evt.target : null;
+        if (!eventTarget || (eventTarget !== target && !target.contains(eventTarget))) return;
+        evt.preventDefault();
+        if (typeof evt.stopImmediatePropagation === 'function') evt.stopImmediatePropagation();
+        else evt.stopPropagation();
+        removeGuard();
+      };
+      document.addEventListener('click', guard, true);
+      window.setTimeout(removeGuard, 2000);
+    }
     if (typeof target.click === 'function') {
       target.click();
       return true;
@@ -752,7 +810,7 @@ async function clickVisibleMatchAt(
       }));
     }
     return true;
-  }).catch(() => false);
+  }, options).catch(() => false);
 
   return clickedViaFallback;
 }
@@ -765,6 +823,7 @@ async function clickVisibleMatchesUntilEvent(
     getHitCount: () => number;
     waitMs: number;
     eventName: string;
+    guardNavigation?: boolean;
   },
 ): Promise<{ clicked: boolean; afterHits: number }> {
   let clicked = false;
@@ -786,7 +845,9 @@ async function clickVisibleMatchesUntilEvent(
     const maxAttempts = Math.min(matchingCount, 8);
 
     for (let i = 0; i < maxAttempts; i++) {
-      const attemptClicked = await clickVisibleMatchAt(page, target.cssSelector, i, target.textMatches);
+      const attemptClicked = await clickVisibleMatchAt(page, target.cssSelector, i, target.textMatches, {
+        guardNavigation: args.guardNavigation,
+      });
       if (!attemptClicked) continue;
 
       clicked = true;
@@ -1127,6 +1188,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
                     getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
                     waitMs: PREVIEW_CUSTOM_CLICK_WAIT_MS,
                     eventName: event.eventName,
+                    guardNavigation: true,
                   });
                   afterHits = customClickResult.afterHits;
                   interactionPerformed = customClickResult.clicked;
@@ -1175,6 +1237,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
                 getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
                 waitMs: PREVIEW_CLICK_WAIT_MS,
                 eventName: event.eventName,
+                guardNavigation: true,
               });
               afterHits = clickHits;
               if (clicked) {
@@ -1193,6 +1256,7 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
                     getHitCount: () => getMatchingFiredEvents(event, siteAnalysis.rootUrl, allFiredEvents).length,
                     waitMs: PREVIEW_CLICK_RETRY_WAIT_MS,
                     eventName: event.eventName,
+                    guardNavigation: true,
                   });
                   clicked = retryResult.clicked || clicked;
                   if (clicked) {
