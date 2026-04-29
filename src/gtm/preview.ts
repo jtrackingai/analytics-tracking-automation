@@ -290,6 +290,7 @@ export const __testOnly = {
   waitForHitCount,
   eventAppliesToPage,
   normalizeComparableUrl,
+  isSameRegistrableDomain,
 };
 
 function getManagedPreviewEvents(schema: EventSchema): GA4Event[] {
@@ -397,7 +398,7 @@ function eventAppliesToPage(event: GA4Event, pageUrl: string, rootUrl: string): 
     }
   }
 
-  return normalizeComparableUrl(pageUrl) === normalizeComparableUrl(rootUrl);
+  return true;
 }
 
 function normalizeComparableUrl(url: string): string {
@@ -407,6 +408,23 @@ function normalizeComparableUrl(url: string): string {
     return parsed.toString();
   } catch {
     return url.split('#')[0] || url;
+  }
+}
+
+function getRegistrableDomain(hostname: string): string {
+  const normalized = hostname.toLowerCase().replace(/\.$/, '');
+  const parts = normalized.split('.').filter(Boolean);
+  if (parts.length <= 2) return normalized;
+  return parts.slice(-2).join('.');
+}
+
+function isSameRegistrableDomain(leftUrl: string, rightUrl: string): boolean {
+  try {
+    const left = new URL(leftUrl);
+    const right = new URL(rightUrl);
+    return getRegistrableDomain(left.hostname) === getRegistrableDomain(right.hostname);
+  } catch {
+    return false;
   }
 }
 
@@ -1026,12 +1044,10 @@ async function runBrowserVerification(args: BrowserVerificationArgs): Promise<Pr
           if (page.isClosed()) continue;
         }
 
-        const siteHostname = new URL(pageAnalysis.url).hostname;
         const blockNav = async (route: import('playwright').Route) => {
           const req = route.request();
           try {
-            const reqHostname = new URL(req.url()).hostname;
-            if (req.resourceType() === 'document' && reqHostname !== siteHostname) {
+            if (req.resourceType() === 'document' && !isSameRegistrableDomain(req.url(), pageAnalysis.url)) {
               await route.abort();
               return;
             }

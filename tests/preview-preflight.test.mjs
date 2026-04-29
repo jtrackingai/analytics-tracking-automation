@@ -323,3 +323,35 @@ test('preview root-page matching normalizes trailing slashes', async () => {
     'Preview should treat root URLs with and without a trailing slash as the same page.',
   );
 });
+
+test('preview treats empty pageUrlPattern as all pages', async () => {
+  const preview = loadPreviewModule();
+
+  const event = {
+    eventName: 'global_nav_click',
+    triggerType: 'click',
+    elementSelector: 'header a',
+    pageUrlPattern: '',
+  };
+
+  assert.equal(
+    preview.__testOnly.eventAppliesToPage(event, 'https://excelmaster.ai/blog', 'http://www.excelmaster.ai'),
+    true,
+    'Empty pageUrlPattern should mean all pages, matching GTM generation semantics.',
+  );
+});
+
+test('preview navigation guard allows apex and www on the same registrable domain', async () => {
+  const preview = loadPreviewModule();
+
+  assert.equal(
+    preview.__testOnly.isSameRegistrableDomain('https://excelmaster.ai/blog', 'http://www.excelmaster.ai'),
+    true,
+    'Preview should not treat apex and www hostnames as cross-site navigation.',
+  );
+  assert.equal(
+    preview.__testOnly.isSameRegistrableDomain('https://discord.gg/CZebXahn6s', 'https://excelmaster.ai'),
+    false,
+    'Preview should still treat true outbound document navigation as cross-site.',
+  );
+});

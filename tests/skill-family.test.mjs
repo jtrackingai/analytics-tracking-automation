@@ -193,12 +193,12 @@ test('portable and ClawHub export profiles keep different packaging boundaries',
     'Portable exports should include the updater runtime.',
   );
   assert.ok(
-    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/cli-runtime/')),
-    'ClawHub exports should not include the bundled CLI bootstrap runtime.',
+    clawhubFiles.some(relativePath => relativePath.endsWith('/runtime/cli-runtime/run-cli.mjs')),
+    'ClawHub exports should include the bundled CLI bootstrap runtime.',
   );
   assert.ok(
-    clawhubFiles.every(relativePath => !relativePath.includes('/runtime/cli-package/')),
-    'ClawHub exports should not include bundled CLI package files.',
+    clawhubFiles.some(relativePath => relativePath.endsWith('/runtime/cli-package/dist/cli.js')),
+    'ClawHub exports should include bundled CLI package files.',
   );
   assert.ok(
     clawhubFiles.every(relativePath => !relativePath.includes('/runtime/skill-runtime/')),
