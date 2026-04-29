@@ -47,7 +47,9 @@ Typical site-wide shared elements include login or sign-up buttons in the top na
 ## Coverage Expectations
 
 - **Language**: Groups reflect the site's **main language**. Other language versions may not fully appear because sitemaps usually favor pages in the site's primary language.
-- **Can't group what wasn't crawled**: Deep links, gated content, login-protected pages won't appear.
+- **Business subdomains**: Same registered-domain subdomains that host login, signup, app onboarding, checkout, billing, account, trial, or contact-sales journeys should be grouped when they were discovered or manually verified as reachable. Put them in explicit groups such as `auth_pages`, `checkout_pages`, or `app_pages` rather than hiding them inside generic marketing groups.
+- **Unreachable subdomains**: Do not create groups for support/docs/help-center subdomains that are WAF-blocked, timeout, or are not relevant to the tracking goal. Keep them as skipped evidence instead.
+- **Can't group what wasn't crawled or verified**: Deep links, gated content, and login-protected pages won't appear unless they were crawled or manually verified and added with enough representative HTML/elements for schema generation.
 - **Don't claim completeness**: Groups represent crawled and sampled pages, not every URL on the site.
 
 ## Compute urlPattern

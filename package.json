@@ -1,6 +1,6 @@
 {
   "name": "analytics-tracking-automation",
-  "version": "1.0.16",
+  "version": "1.0.17",
   "description": "Automated web event tracking skill for GA4 + GTM",
   "main": "dist/cli.js",
   "bin": {
@@ -18,7 +18,7 @@
     "install:skills": "node scripts/install-skills.mjs",
     "sync:skill-docs": "node scripts/sync-skill-docs.mjs",
     "test": "npm run build && npm run test:built",
-    "test:built": "node --test tests/workflow-state.test.mjs tests/live-gtm-parser.test.mjs tests/skill-family.test.mjs tests/skill-contract.test.mjs tests/auto-update.test.mjs tests/workflow-enhancements.test.mjs tests/telemetry.test.mjs tests/oauth-embedded-config.test.mjs",
+    "test:built": "node --test tests/workflow-state.test.mjs tests/live-gtm-parser.test.mjs tests/skill-family.test.mjs tests/skill-contract.test.mjs tests/auto-update.test.mjs tests/workflow-enhancements.test.mjs tests/telemetry.test.mjs tests/oauth-embedded-config.test.mjs tests/crawler-url-utils.test.mjs",
     "postinstall": "playwright install chromium"
   },
   "dependencies": {

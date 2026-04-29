@@ -163,10 +163,6 @@ function listBundledCliFiles(repoRoot) {
 }
 
 function listBundledCliFilesForProfile(repoRoot, profile) {
-  if (profile === EXPORT_PROFILE_CLAWHUB) {
-    return [];
-  }
-
   return listBundledCliFiles(repoRoot);
 }
 

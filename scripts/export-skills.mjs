@@ -167,10 +167,6 @@ function buildCliPackageJson() {
 }
 
 function copyBundledCliRuntime(outputPath, profile) {
-  if (profile === EXPORT_PROFILE_CLAWHUB) {
-    return;
-  }
-
   copyDirectory('runtime/cli-runtime', path.join(outputPath, 'runtime', 'cli-runtime'));
 
   const cliPackagePath = path.join(outputPath, 'runtime', 'cli-package');

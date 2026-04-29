@@ -228,6 +228,87 @@ test('preview click helper respects :contains text filters when choosing candida
   assert.deepEqual(clicked, ['right']);
 });
 
+test('preview click helper can guard app navigation handlers during preview clicks', async () => {
+  const preview = loadPreviewModule();
+
+  const listeners = [];
+  const target = {
+    textContent: 'Continue with Google',
+    closest() { return this; },
+    contains(node) { return node === this; },
+    getBoundingClientRect() { return { width: 120, height: 32 }; },
+    scrollIntoView() {},
+    focus() {},
+    click() {
+      const event = {
+        target: this,
+        defaultPrevented: false,
+        propagationStopped: false,
+        preventDefault() { this.defaultPrevented = true; },
+        stopImmediatePropagation() { this.propagationStopped = true; },
+      };
+      for (const listener of listeners) listener(event);
+      clicked.push(event);
+    },
+  };
+  const clicked = [];
+
+  const fakeCandidates = [
+    {
+      async isVisible() { return true; },
+      async scrollIntoViewIfNeeded() {},
+      async evaluate(fn, arg) {
+        const originalDocument = globalThis.document;
+        const originalWindow = globalThis.window;
+        const originalElement = globalThis.Element;
+        globalThis.Element = function Element() {};
+        Object.setPrototypeOf(target, globalThis.Element.prototype);
+        globalThis.document = {
+          addEventListener(type, listener) {
+            if (type === 'click') listeners.push(listener);
+          },
+          removeEventListener(type, listener) {
+            if (type !== 'click') return;
+            const index = listeners.indexOf(listener);
+            if (index >= 0) listeners.splice(index, 1);
+          },
+        };
+        globalThis.window = {
+          getComputedStyle() { return { visibility: 'visible', display: 'block' }; },
+          setTimeout() {
+            return 0;
+          },
+        };
+        try {
+          return fn(target, arg);
+        } finally {
+          globalThis.document = originalDocument;
+          globalThis.window = originalWindow;
+          globalThis.Element = originalElement;
+        }
+      },
+      async click() { target.click(); },
+    },
+  ];
+
+  const fakePage = {
+    locator() {
+      return {
+        async count() { return fakeCandidates.length; },
+        nth(index) { return fakeCandidates[index]; },
+      };
+    },
+  };
+
+  assert.equal(
+    await preview.__testOnly.clickVisibleMatchAt(fakePage, 'button', 0, [], { guardNavigation: true }),
+    true,
+  );
+  assert.equal(clicked.length, 1);
+  assert.equal(clicked[0].defaultPrevented, true);
+  assert.equal(clicked[0].propagationStopped, true);
+});
+
 test('preview can recognize form-like custom selectors', async () => {
   const preview = loadPreviewModule();
 
@@ -321,5 +402,37 @@ test('preview root-page matching normalizes trailing slashes', async () => {
     preview.__testOnly.eventAppliesToPage(event, 'https://novita.ai/', 'https://novita.ai'),
     true,
     'Preview should treat root URLs with and without a trailing slash as the same page.',
+  );
+});
+
+test('preview treats empty pageUrlPattern as all pages', async () => {
+  const preview = loadPreviewModule();
+
+  const event = {
+    eventName: 'global_nav_click',
+    triggerType: 'click',
+    elementSelector: 'header a',
+    pageUrlPattern: '',
+  };
+
+  assert.equal(
+    preview.__testOnly.eventAppliesToPage(event, 'https://excelmaster.ai/blog', 'http://www.excelmaster.ai'),
+    true,
+    'Empty pageUrlPattern should mean all pages, matching GTM generation semantics.',
+  );
+});
+
+test('preview navigation guard allows apex and www on the same registrable domain', async () => {
+  const preview = loadPreviewModule();
+
+  assert.equal(
+    preview.__testOnly.isSameRegistrableDomain('https://excelmaster.ai/blog', 'http://www.excelmaster.ai'),
+    true,
+    'Preview should not treat apex and www hostnames as cross-site navigation.',
+  );
+  assert.equal(
+    preview.__testOnly.isSameRegistrableDomain('https://discord.gg/CZebXahn6s', 'https://excelmaster.ai'),
+    false,
+    'Preview should still treat true outbound document navigation as cross-site.',
   );
 });

@@ -11,10 +11,12 @@ Set these expectations with the user before crawling:
 - Only a limited number of child pages are sampled within the same section or path, so deeper links may not be captured
 - Large sites may hit the **40-page total cap**; partial coverage is normal
 - **E-commerce sites** trigger smarter URL ordering — category/listing pages before product pages
+- Same registered-domain subdomains are in scope when they carry business-critical journeys. Prioritize linked subdomains such as `app.example.com`, `account.example.com`, `auth.example.com`, checkout/billing/payment hosts, login, signup, trial, pricing, contact-sales, and password-reset pages before broad blog or resource sampling.
+- Do not blindly deep-crawl every subdomain. Support/docs/help-center subdomains, WAF-protected pages, and unrelated operational hosts should be listed as skipped or grouped separately only when they are reachable and relevant to the tracking goal.
 
 ## Partial Mode Rules
 
-- All URLs must belong to the same domain as the root `<URL>`
+- All URLs must belong to the same registered domain as the root `<URL>`; subdomains such as `app.example.com/login` are valid when they share the root registered domain.
 - Maximum 20 URLs per call — split into batches or use full-site mode for more
 
 ## Execution Environment
@@ -36,6 +38,7 @@ Set these expectations with the user before crawling:
 
 - How many pages were analyzed
 - Any skipped URLs and why (login pages, WAF blocks, errors)
+- Any same-domain business subdomains that were analyzed or intentionally skipped, especially app/login/signup/checkout flows
 - Any `crawlWarnings`
 - Detected platform (`generic` or `shopify`) and detection signals when available
 - **Detected dataLayer events** — if the site already pushes events via `dataLayer.push()` (e.g. e-commerce `purchase`, `add_to_cart`), list them. These can be leveraged as `custom` triggerType events in Step 2 instead of re-instrumenting with click triggers.

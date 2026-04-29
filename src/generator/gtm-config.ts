@@ -259,7 +259,7 @@ function buildCustomListenerHtml(event: GA4Event): string {
     '        return;',
     '      }',
     '    } catch (_err) {}',
-  '  }, true);',
+    '  }, true);',
     '})();',
     '</script>',
   ].join('\n');

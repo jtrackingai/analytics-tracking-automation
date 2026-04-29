@@ -38,6 +38,92 @@ export function getSectionPrefix(url: string): string {
   }
 }
 
+const BUSINESS_CRITICAL_SUBDOMAIN_LABELS = new Set([
+  'account',
+  'accounts',
+  'app',
+  'auth',
+  'billing',
+  'checkout',
+  'login',
+  'my',
+  'pay',
+  'payment',
+  'payments',
+  'secure',
+  'signup',
+]);
+
+const BUSINESS_CRITICAL_PATH_PATTERNS: RegExp[] = [
+  /\/(?:account|accounts|auth|billing|cart|checkout|contact-sales|demo|forgot-password|log-?in|password|pay|payment|pricing|register|reset-password|sign-?in|sign-?up|subscribe|subscription|trial)(?:[/?#]|$|-)/i,
+];
+
+const BUSINESS_CRITICAL_QUERY_KEYS = new Set([
+  'checkout',
+  'package_type',
+  'pay_cycle',
+  'plan',
+  'price',
+  'price_id',
+  'priceid',
+  'subscribe_type',
+  'subscription',
+  'trial',
+]);
+
+function getSubdomainLabels(hostname: string, rootDomain: string): string[] {
+  const normalizedHost = hostname.toLowerCase().replace(/\.$/, '');
+  const normalizedRoot = rootDomain.toLowerCase().replace(/\.$/, '');
+
+  if (normalizedHost === normalizedRoot || !normalizedHost.endsWith(`.${normalizedRoot}`)) {
+    return [];
+  }
+
+  return normalizedHost
+    .slice(0, -(normalizedRoot.length + 1))
+    .split('.')
+    .filter(Boolean);
+}
+
+export function isBusinessCriticalUrl(url: string, rootDomain: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const subdomainLabels = getSubdomainLabels(parsed.hostname, rootDomain);
+    if (subdomainLabels.some(label => BUSINESS_CRITICAL_SUBDOMAIN_LABELS.has(label))) {
+      return true;
+    }
+
+    if (BUSINESS_CRITICAL_PATH_PATTERNS.some(pattern => pattern.test(parsed.pathname))) {
+      return true;
+    }
+
+    return Array.from(parsed.searchParams.keys()).some(key =>
+      BUSINESS_CRITICAL_QUERY_KEYS.has(key.toLowerCase()),
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function prioritizeBusinessCriticalUrls(urls: string[], rootDomain: string): string[] {
+  const seen = new Set<string>();
+  const critical: string[] = [];
+  const standard: string[] = [];
+
+  for (const url of urls) {
+    if (seen.has(url)) continue;
+    seen.add(url);
+
+    if (isBusinessCriticalUrl(url, rootDomain)) {
+      critical.push(url);
+    } else {
+      standard.push(url);
+    }
+  }
+
+  return [...critical, ...standard];
+}
+
 function getUrlTemplate(url: string): string {
   try {
     const semanticKeywords = new Set([

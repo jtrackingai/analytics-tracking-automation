@@ -445,10 +445,21 @@ test('generate-gtm creates listener-backed custom event tags for click-like cust
   assert.match(htmlValue, /link_text: text/);
   assert.match(htmlValue, /link_url: href/);
   assert.match(htmlValue, /link_classes: className/);
+  assert.doesNotMatch(htmlValue, /stopImmediatePropagation/);
+  assert.doesNotMatch(htmlValue, /eventCallback = releaseClick/);
+  assert.doesNotMatch(htmlValue, /eventTimeout = 1200/);
   assert.doesNotMatch(htmlValue, /DOWNLOAD CERTIFICATE/);
   assert.doesNotMatch(htmlValue, /item\.texts/);
   assert.doesNotMatch(htmlValue, /textMatch/);
   assert.ok(customTrigger, 'custom event trigger should be generated');
+  assert.deepEqual(
+    customTrigger.customEventFilter[0].parameter,
+    [
+      { type: 'template', key: 'arg0', value: '{{_event}}' },
+      { type: 'template', key: 'arg1', value: 'download_asset_click' },
+    ],
+    'custom event trigger should use the GTM API-required event variable',
+  );
   assert.ok(ga4Tag, 'GA4 event tag should be generated for the custom event');
   const eventParameters = ga4Tag.parameter.find(item => item.key === 'eventParameters');
   const values = eventParameters.list.map(item => item.map.find(entry => entry.key === 'value').value);

@@ -3,6 +3,7 @@ import { chromium, Browser, Page, Response } from 'playwright';
 import {
   extractDomain, isSameDomain, normalizeUrl, getSectionPrefix,
   sampleUrlsBySection, detectEcommerceSite, reorderForEcommerce,
+  prioritizeBusinessCriticalUrls,
   discoverNavLinks, discoverAllLinks,
 } from './url-utils';
 import { extractCleanedHtml } from './html-cleaner';
@@ -701,6 +702,7 @@ export async function analyzeSite(
         if (isEcommerce) {
           level1Candidates = reorderForEcommerce(level1Candidates);
         }
+        level1Candidates = prioritizeBusinessCriticalUrls(level1Candidates, rootDomain);
 
         const level1Urls = sampleUrlsBySection(
           level1Candidates,
@@ -727,6 +729,7 @@ export async function analyzeSite(
           if (isEcommerce) {
             level2Filtered = reorderForEcommerce(level2Filtered);
           }
+          level2Filtered = prioritizeBusinessCriticalUrls(level2Filtered, rootDomain);
 
           const level2Urls = sampleUrlsBySection(
             level2Filtered,
